@@ -1,20 +1,40 @@
-# Ignore virtual environment
+# Environments
+.env
+.venv
+env/
 venv/
+ENV/
+env.bak/
+venv.bak/
 
-# Python cache
+# User Data & Settings
+settings.json
+history.json
+history/
+*.log
+warmup_cache.txt
+
+# Python
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
+*$py.class
+*.so
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# IDE / editor files
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS files
-Thumbs.db
+# OS Files
 .DS_Store
-
-# Warm-up cache (user-specific)
-.localwhisper/
+Thumbs.db

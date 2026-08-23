@@ -1,0 +1,3 @@
+"""
+LocalWhisper Pro UI Package
+"""

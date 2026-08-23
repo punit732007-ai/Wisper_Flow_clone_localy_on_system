@@ -1,7 +1,12 @@
 @echo off
-:: ─────────────────────────────────────────────────────────────────
-:: LocalWhisper — Quick Launcher
-:: Activates the venv and runs the app from the project directory.
-:: ─────────────────────────────────────────────────────────────────
-call "%~dp0venv\Scripts\activate.bat"
-python "%~dp0main.py" %*
+chcp 65001 >nul
+title LocalWhisper Pro v3.0
+cd /d "%~dp0"
+
+if exist ".venv\Scripts\python.exe" (
+    ".venv\Scripts\python.exe" main.py %*
+) else (
+    echo [LocalWhisper] Virtual environment not found. Running install.bat first...
+    call install.bat
+    ".venv\Scripts\python.exe" main.py %*
+)

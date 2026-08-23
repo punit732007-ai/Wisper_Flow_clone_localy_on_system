@@ -28,40 +28,40 @@ Using **faster-whisper** for lightning-fast local transcription and a powerful *
 
 ---
 
-## 🚀 Getting Started
+## 🚀 Installation & Setup Guide
 
-### Prerequisites
-- **Python 3.11+**
-- **NVIDIA GPU** (Recommended for CUDA acceleration) or a fast modern CPU.
-- **Ollama** (Optional, for offline AI refinement).
+### Step 1: Download the App
+1. Go to the [Releases page](../../releases) on the right side of this repository.
+2. Download the `LocalWhisper_Pro_v3.1_Windows.zip` file.
+3. Extract the ZIP file anywhere on your computer (e.g., your Desktop).
+4. Inside the extracted folder, double-click **`LocalWhisper Pro.exe`** to run the app. No Python installation required!
 
-### Installation
+### Step 2: Install Ollama (For Local AI Processing)
+LocalWhisper uses **Ollama** to refine your transcribed text locally and securely without needing an internet connection.
 
-1. Clone this repository:
+1. Download Ollama from their official website: **[ollama.com/download](https://ollama.com/download)**
+2. Install the Windows application.
+3. Open your Command Prompt (cmd) or PowerShell and run the following command to download a fast, smart language model (Llama 3 is highly recommended):
    ```cmd
-   git clone https://github.com/punit732007-ai/Wisper_Flow_clone_localy_on_system.git
-   cd Wisper_Flow_clone_localy_on_system
+   ollama run llama3.1:8b
    ```
+   *Note: This will download the model (about 4.7GB). You can close the terminal once it says "success".*
 
-2. Run the automated installer to set up the virtual environment and install dependencies:
-   ```cmd
-   install.bat
-   ```
-
-3. Launch the application:
-   ```cmd
-   run.bat
-   ```
+### Step 3: Configure LocalWhisper Pro
+1. Once **LocalWhisper Pro** is running, click the **Gear Icon ⚙️** on the floating glass HUD to open Settings.
+2. Go to the **"🧠 AI Refiner"** tab.
+3. Under **Provider**, select `ollama`.
+4. In the **Ollama Model** dropdown, select `llama3.1:8b` (or whichever model you downloaded).
+5. Click **💾 Save Settings**.
 
 ---
 
 ## ⚙️ How to Use
 
-1. **Start the App**: Double click `run.bat`. A small glassmorphic pill (the HUD) will appear on your screen, and an icon will be added to your system tray.
-2. **Dictate**: Press and hold the global hotkey (Default: `Ctrl + Space`) and start speaking. 
-3. **Release & Type**: Release the hotkey. The HUD will show "Processing...", and within a second, your perfectly refined text will type itself out exactly where your cursor is blinking.
-4. **Change Modes**: Right-click the HUD (or use the system tray menu) to switch dictation modes instantly depending on what you are typing.
-5. **Settings**: Click the gear icon ⚙️ on the HUD to access settings, where you can change the AI provider, Whisper model size, microphone, and hotkeys.
+1. **Dictate**: Press and hold the global hotkey (Default: `Ctrl + Space`) and start speaking. 
+2. **Release & Type**: Release the hotkey. The HUD will show "Processing...", and within a second, your perfectly refined text will type itself out exactly where your cursor is blinking.
+3. **Change Modes**: Right-click the HUD (or use the system tray menu) to switch dictation modes instantly depending on what you are typing.
+4. **Cloud AI (Optional)**: If you don't want to use Ollama, you can go to Settings and enter an API key for **Groq**, **OpenAI**, or **Gemini** for ultra-fast cloud processing instead.
 
 ---
 

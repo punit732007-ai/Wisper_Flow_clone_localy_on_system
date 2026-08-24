@@ -211,9 +211,11 @@ class LocalWhisperApp:
             refine_time = time.perf_counter() - t_refine
 
             total_time = time.perf_counter() - t0
+            # Safe print: encode to ascii with replace to avoid UnicodeEncodeError on cp1252 terminals
+            safe_text = refined_text.encode("ascii", errors="replace").decode("ascii")
             print(
                 f"[Pipeline] Whisper: {whisper_time:.2f}s | Refine: {refine_time:.2f}s | Total: {total_time:.2f}s\n"
-                f"           Result: {refined_text!r}"
+                f"           Result: {safe_text}"
             )
 
             # Step 3: Paste at Active Cursor

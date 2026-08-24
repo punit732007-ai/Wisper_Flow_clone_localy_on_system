@@ -115,27 +115,32 @@ def paste_via_clipboard(text: str) -> None:
         threading.Thread(target=_restore, daemon=True).start()
 
 
-def type_unicode_pynput(text: str) -> None:
-    from pynput.keyboard import Controller
-    keyboard = Controller()
-    keyboard.type(text)
+# ─── Singleton pynput Controller (reuse to avoid resource leaks) ───
+_pynput_controller = None
+
+def _get_pynput_controller():
+    """Get or create a singleton pynput keyboard Controller."""
+    global _pynput_controller
+    if _pynput_controller is None:
+        from pynput.keyboard import Controller
+        _pynput_controller = Controller()
+    return _pynput_controller
+
 
 def paste_text(text: str) -> None:
-    """Universal paste dispatcher honoring user settings."""
+    """Universal paste dispatcher. Types text at the active cursor position."""
     if not text or not text.strip():
         return
 
-    # If the user is physically holding Ctrl, Shift, or Alt, it might combine with the typed text.
-    # However, blindly calling keyUp("alt") on Windows triggers the application menu bar,
-    # which can cause typed characters to trigger menu shortcuts (like Alt, F, X to close app).
-    # We will only release Ctrl and Shift to be safe, using pynput.
+    # Release Ctrl and Shift only (NOT Alt/Win — those trigger menus and close apps)
     try:
-        from pynput.keyboard import Controller, Key
-        kb = Controller()
-        kb.release(Key.ctrl)
-        kb.release(Key.ctrl_l)
-        kb.release(Key.ctrl_r)
-        kb.release(Key.shift)
+        from pynput.keyboard import Key
+        kb = _get_pynput_controller()
+        for key in (Key.ctrl, Key.ctrl_l, Key.ctrl_r, Key.shift):
+            try:
+                kb.release(key)
+            except Exception:
+                pass
     except Exception:
         pass
 
@@ -143,7 +148,27 @@ def paste_text(text: str) -> None:
     if config.get("add_trailing_space", True) and not text.endswith((" ", "\n", "\t")):
         text = text + " "
 
-    # Use pynput for highly reliable direct typing across all apps
-    # This completely bypasses the OS clipboard and Windows Clipboard History (Win+V)
-    type_unicode_pynput(text)
-    print(f"[Paster] Typed {len(text)} characters (pynput) OK")
+    # Strategy 1: pynput direct typing (best — no clipboard, types at cursor)
+    try:
+        kb = _get_pynput_controller()
+        kb.type(text)
+        print(f"[Paster] Typed {len(text)} chars (pynput) OK")
+        return
+    except Exception as e:
+        print(f"[Paster] pynput.type() failed: {e}")
+
+    # Strategy 2: Win32 SendInput (fallback — also types at cursor, no clipboard)
+    try:
+        type_unicode_direct(text)
+        print(f"[Paster] Typed {len(text)} chars (sendinput) OK")
+        return
+    except Exception as e:
+        print(f"[Paster] SendInput failed: {e}")
+
+    # Strategy 3: Clipboard paste (last resort)
+    try:
+        paste_via_clipboard(text)
+        print(f"[Paster] Pasted {len(text)} chars (clipboard) OK")
+    except Exception as e:
+        print(f"[Paster] All paste methods failed: {e}")
+

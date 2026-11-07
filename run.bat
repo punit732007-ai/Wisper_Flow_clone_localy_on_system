@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul
-title LocalWhisper Pro v3.0
+title LocalWhisper Pro v3.2
 cd /d "%~dp0"
 
 if exist ".venv\Scripts\python.exe" (

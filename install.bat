@@ -1,9 +1,9 @@
 @echo off
-title LocalWhisper Pro — One-Click Setup
+title LocalWhisper Pro v3.2 — One-Click Setup
 cd /d "%~dp0"
 
 echo ===================================================
-echo   LocalWhisper Pro v3.0 — Installation & Setup
+echo   LocalWhisper Pro v3.2 — Installation & Setup
 echo ===================================================
 echo.
 

@@ -1,5 +1,5 @@
 """
-LocalWhisper Pro v3.0 — Configuration & State Store
+LocalWhisper Pro v3.2 — Configuration & State Store
 Handles settings persistence in ~/.localwhisper/settings.json,
 CUDA path preloading, hardware auto-detection, and multi-mode definitions.
 """
@@ -24,6 +24,7 @@ SETTINGS_FILE = APP_DIR / "settings.json"
 HISTORY_FILE = APP_DIR / "history.json"
 WARMUP_CACHE_FILE = APP_DIR / "warmup_ok"
 WARMUP_CACHE_MAX_AGE = 24 * 3600  # 24 hours
+APP_VERSION = "3.2.0"
 
 # ─── Preload Windows CUDA DLL Paths ──────────────────────────────
 def preload_cuda_dlls():

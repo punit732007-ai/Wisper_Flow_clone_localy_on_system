@@ -46,6 +46,13 @@ class AudioVisualizerWidget:
             )
             self.bar_ids.append(bar_id)
 
+    def reposition(self, x: int, y: int, width: int, height: int) -> None:
+        """Update coordinates and size when HUD layout changes."""
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+
     def set_state(self, state: str) -> None:
         """Update visualizer color according to HUD state."""
         self.state = state

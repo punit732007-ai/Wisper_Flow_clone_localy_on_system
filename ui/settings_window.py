@@ -1,7 +1,7 @@
 """
 LocalWhisper Pro — Settings Window
 Comprehensive multi-tab graphical settings interface for audio, models, AI backends,
-dictation modes, hotkeys, and typing options.
+dictation modes, hotkeys, themes, and appearance options.
 """
 
 import re
@@ -10,12 +10,15 @@ import threading
 import tkinter as tk
 from tkinter import ttk, messagebox
 from typing import Callable, Optional, List, Dict, Any, Tuple
+
 from config import config, DEFAULT_DICTATION_MODES
 from core.audio_engine import AudioEngine
 from core.ai_refiner import ai_refiner
+from ui.theme_engine import theme_manager
+from ui.theme_applicator import theme_applicator
 
 
-# ── Model Options & Mappings (R4) ─────────────────────────────
+# ── Model Options & Mappings ──────────────────────────────────
 
 WHISPER_MODEL_OPTIONS: List[Tuple[str, str]] = [
     ("tiny", "tiny (39M) — Fastest"),
@@ -30,7 +33,7 @@ MODEL_ID_TO_LABEL: Dict[str, str] = {model_id: label for model_id, label in WHIS
 MODEL_LABEL_TO_ID: Dict[str, str] = {label: model_id for model_id, label in WHISPER_MODEL_OPTIONS}
 
 
-# ── Language Options & Mappings (R1) ──────────────────────────
+# ── Language Options & Mappings ───────────────────────────────
 
 WHISPER_LANG_OPTIONS: List[Tuple[Optional[str], str]] = [
     (None, "Auto-detect (English/Hindi)"),
@@ -45,13 +48,20 @@ LANG_LABEL_TO_CODE: Dict[str, Optional[str]] = {label: code for code, label in W
 class SettingsWindow:
     """Settings dialog with categorized configuration tabs."""
 
-    def __init__(self, parent_root: tk.Tk, on_settings_changed: Optional[Callable[[], None]] = None):
+    def __init__(
+        self,
+        parent_root: tk.Tk,
+        on_settings_changed: Optional[Callable[[], None]] = None,
+        on_open_themes: Optional[Callable[[], None]] = None,
+    ):
         self.parent = parent_root
         self.on_settings_changed = on_settings_changed
+        self.on_open_themes = on_open_themes
         self.win: Optional[tk.Toplevel] = None
         self._test_stream = None
         self._test_active = False
         self._device_map: Dict[str, Dict[str, Any]] = {}
+        self._theme_label_to_key: Dict[str, str] = {}
 
     def show(self) -> None:
         """Create or bring settings window to focus."""
@@ -60,47 +70,52 @@ class SettingsWindow:
             self.win.focus_force()
             return
 
+        theme = theme_manager.current_theme
+
         self.win = tk.Toplevel(self.parent)
         self.win.title("LocalWhisper Pro — Settings")
-        self.win.geometry("640x540")
-        self.win.minsize(580, 480)
-        self.win.configure(bg="#1e1e2e")
+        self.win.geometry("680x560")
+        self.win.minsize(600, 500)
+        self.win.configure(bg=theme["bg_primary"])
+
+        # Register with theme applicator
+        theme_applicator.register_settings(self)
 
         # Set modern dark styling
         style = ttk.Style()
         style.theme_use("clam")
         style.configure(
             "TNotebook",
-            background="#1e1e2e",
+            background=theme["bg_primary"],
             borderwidth=0,
         )
         style.configure(
             "TNotebook.Tab",
-            background="#181825",
-            foreground="#cdd6f4",
+            background=theme["bg_secondary"],
+            foreground=theme["fg_primary"],
             padding=[12, 6],
-            font=("Segoe UI", 9, "bold"),
+            font=(theme.get("font_family", "Segoe UI"), 9, "bold"),
         )
         style.map(
             "TNotebook.Tab",
-            background=[("selected", "#313244")],
-            foreground=[("selected", "#89b4fa")],
+            background=[("selected", theme["bg_tertiary"])],
+            foreground=[("selected", theme["accent"])],
         )
         style.configure(
             "TFrame",
-            background="#1e1e2e",
+            background=theme["bg_primary"],
         )
         style.configure(
             "TLabel",
-            background="#1e1e2e",
-            foreground="#cdd6f4",
-            font=("Segoe UI", 9),
+            background=theme["bg_primary"],
+            foreground=theme["fg_primary"],
+            font=(theme.get("font_family", "Segoe UI"), 9),
         )
         style.configure(
             "Header.TLabel",
-            background="#1e1e2e",
-            foreground="#89b4fa",
-            font=("Segoe UI", 11, "bold"),
+            background=theme["bg_primary"],
+            foreground=theme["accent"],
+            font=(theme.get("font_family", "Segoe UI"), 11, "bold"),
         )
 
         # Tab Notebook
@@ -108,6 +123,7 @@ class SettingsWindow:
         notebook.pack(fill="both", expand=True, padx=12, pady=(12, 6))
 
         # Build Tabs
+        self._build_appearance_tab(notebook)
         self._build_audio_tab(notebook)
         self._build_whisper_tab(notebook)
         self._build_ai_tab(notebook)
@@ -115,26 +131,26 @@ class SettingsWindow:
         self._build_hotkeys_tab(notebook)
 
         # Bottom Action Bar
-        bottom_bar = tk.Frame(self.win, bg="#181825", height=48)
+        bottom_bar = tk.Frame(self.win, bg=theme["bg_secondary"], height=48)
         bottom_bar.pack(fill="x", side="bottom", padx=0, pady=0)
 
         status_lbl = tk.Label(
             bottom_bar,
             text="Settings saved to ~/.localwhisper/settings.json",
-            bg="#181825",
-            fg="#6c7086",
-            font=("Segoe UI", 8),
+            bg=theme["bg_secondary"],
+            fg=theme["fg_secondary"],
+            font=(theme.get("font_family", "Segoe UI"), 8),
         )
         status_lbl.pack(side="left", padx=12, pady=10)
 
         save_btn = tk.Button(
             bottom_bar,
             text="Save & Apply",
-            bg="#89b4fa",
-            fg="#11111b",
-            activebackground="#b4befe",
-            activeforeground="#11111b",
-            font=("Segoe UI Semibold", 9),
+            bg=theme["accent"],
+            fg=theme.get("accent_fg", "#11111b"),
+            activebackground=theme["accent_hover"],
+            activeforeground=theme.get("accent_fg", "#11111b"),
+            font=(theme.get("font_family", "Segoe UI"), 9, "bold"),
             padx=16,
             pady=4,
             relief="flat",
@@ -144,19 +160,99 @@ class SettingsWindow:
 
         self.win.protocol("WM_DELETE_WINDOW", self._on_close)
 
+    # ── Tab 0: Appearance & Themes ────────────────────────────────
+
+    def _build_appearance_tab(self, notebook: ttk.Notebook) -> None:
+        frame = ttk.Frame(notebook)
+        notebook.add(frame, text="🎨 Appearance")
+
+        theme = theme_manager.current_theme
+        content = tk.Frame(frame, bg=theme["bg_primary"], padx=16, pady=16)
+        content.pack(fill="both", expand=True)
+
+        ttk.Label(content, text="Color Theme (35+ Aesthetics)", style="Header.TLabel").pack(anchor="w", pady=(0, 4))
+
+        all_themes = theme_manager.all_themes
+        theme_names = []
+        self._theme_label_to_key = {}
+        for k, t in all_themes.items():
+            lbl = f"{t.get('name', k)} [{t.get('category', 'Custom')}]"
+            theme_names.append(lbl)
+            self._theme_label_to_key[lbl] = k
+
+        curr_key = theme_manager.current_theme_key
+        curr_lbl = next((l for l, k in self._theme_label_to_key.items() if k == curr_key), theme_names[0] if theme_names else "Default Dark")
+
+        self.theme_picker_var = tk.StringVar(value=curr_lbl)
+        theme_combo = ttk.Combobox(content, textvariable=self.theme_picker_var, values=theme_names, state="readonly", width=46)
+        theme_combo.pack(anchor="w", pady=(0, 8))
+        theme_combo.bind("<<ComboboxSelected>>", self._on_theme_dropdown_selected)
+
+        # Big button to launch Theme Studio
+        studio_btn = tk.Button(
+            content,
+            text="✨ Open Themes & Customization Studio (Gallery, Palettes & Wallpaper)...",
+            bg=theme["accent"],
+            fg=theme.get("accent_fg", "#11111b"),
+            font=(theme.get("font_family", "Segoe UI"), 9, "bold"),
+            padx=14,
+            pady=6,
+            relief="flat",
+            command=self._launch_theme_studio,
+        )
+        studio_btn.pack(anchor="w", pady=(4, 16))
+
+        # HUD Layout
+        ttk.Label(content, text="Floating HUD Layout Style", style="Header.TLabel").pack(anchor="w", pady=(0, 4))
+        self.hud_layout_var = tk.StringVar(value=config.get("hud_layout", "compact_pill"))
+
+        layout_options = [
+            ("compact_pill", "Compact Pill (270×48) — Curved capsule with visualizer"),
+            ("classic_bar", "Classic Dock Bar (320×42) — Horizontal dock with sharp pill corners"),
+            ("expanded_card", "Expanded Island (310×64) — Larger pill with full waveform"),
+            ("minimal_dot", "Minimal Dot (200×38) — Ultra-small distraction-free"),
+        ]
+        for val, lbl in layout_options:
+            tk.Radiobutton(
+                content, text=lbl, variable=self.hud_layout_var, value=val,
+                bg=theme["bg_primary"], fg=theme["fg_primary"], selectcolor=theme["bg_tertiary"],
+                font=(theme.get("font_family", "Segoe UI"), 9),
+            ).pack(anchor="w", pady=2)
+
+        # Font Family
+        ttk.Label(content, text="Interface Font Family", style="Header.TLabel").pack(anchor="w", pady=(12, 4))
+        self.font_family_var = tk.StringVar(value=config.get("font_family", "Segoe UI"))
+        font_combo = ttk.Combobox(
+            content, textvariable=self.font_family_var,
+            values=["Segoe UI", "Cascadia Code", "Consolas", "Roboto", "Helvetica", "Arial", "Georgia", "Courier New", "Impact"],
+            state="readonly", width=28,
+        )
+        font_combo.pack(anchor="w", pady=(0, 4))
+
+    def _on_theme_dropdown_selected(self, event=None) -> None:
+        sel_lbl = self.theme_picker_var.get()
+        chosen_key = self._theme_label_to_key.get(sel_lbl, "default_dark")
+        theme_manager.set_theme(chosen_key)
+        theme_applicator.apply_current_theme()
+
+    def _launch_theme_studio(self) -> None:
+        if self.on_open_themes:
+            self.on_open_themes()
+
     # ── Tab 1: Audio & Microphone ─────────────────────────────────
 
     def _build_audio_tab(self, notebook: ttk.Notebook) -> None:
         frame = ttk.Frame(notebook)
         notebook.add(frame, text="🎙️ Microphone")
 
-        content = tk.Frame(frame, bg="#1e1e2e", padx=16, pady=16)
+        theme = theme_manager.current_theme
+        content = tk.Frame(frame, bg=theme["bg_primary"], padx=16, pady=16)
         content.pack(fill="both", expand=True)
 
         ttk.Label(content, text="Microphone Device", style="Header.TLabel").pack(anchor="w", pady=(0, 4))
 
         # Device selection row with Combobox and Refresh button
-        dev_row = tk.Frame(content, bg="#1e1e2e")
+        dev_row = tk.Frame(content, bg=theme["bg_primary"])
         dev_row.pack(fill="x", pady=(0, 2))
 
         self.mic_var = tk.StringVar()
@@ -166,11 +262,11 @@ class SettingsWindow:
         self.refresh_btn = tk.Button(
             dev_row,
             text="🔄 Refresh",
-            bg="#313244",
-            fg="#cdd6f4",
-            activebackground="#45475a",
-            activeforeground="#ffffff",
-            font=("Segoe UI", 9),
+            bg=theme["bg_tertiary"],
+            fg=theme["fg_primary"],
+            activebackground=theme["accent_hover"],
+            activeforeground=theme.get("accent_fg", "#11111b"),
+            font=(theme.get("font_family", "Segoe UI"), 9),
             padx=10,
             pady=2,
             relief="flat",
@@ -181,23 +277,23 @@ class SettingsWindow:
         self.mic_status_lbl = tk.Label(
             content,
             text="",
-            bg="#1e1e2e",
-            fg="#a6adc8",
-            font=("Segoe UI", 8),
+            bg=theme["bg_primary"],
+            fg=theme["fg_secondary"],
+            font=(theme.get("font_family", "Segoe UI"), 8),
         )
         self.mic_status_lbl.pack(anchor="w", pady=(0, 12))
 
-        # Live Volume Meter Test setup first so test_btn exists before _refresh_devices
+        # Live Volume Meter Test
         ttk.Label(content, text="Microphone Volume Test", style="Header.TLabel").pack(anchor="w", pady=(0, 4))
-        meter_frame = tk.Frame(content, bg="#181825", padx=8, pady=8)
+        meter_frame = tk.Frame(content, bg=theme["bg_secondary"], padx=8, pady=8)
         meter_frame.pack(fill="x", pady=(0, 16))
 
-        self.meter_canvas = tk.Canvas(meter_frame, bg="#11111b", height=14, highlightthickness=0)
+        self.meter_canvas = tk.Canvas(meter_frame, bg=theme["bg_tertiary"], height=14, highlightthickness=0)
         self.meter_canvas.pack(fill="x", side="left", expand=True, padx=(0, 8))
 
         self.test_btn = tk.Button(
-            meter_frame, text="Test Mic", bg="#313244", fg="#cdd6f4",
-            activebackground="#45475a", font=("Segoe UI", 8),
+            meter_frame, text="Test Mic", bg=theme["bg_tertiary"], fg=theme["fg_primary"],
+            activebackground=theme["accent_hover"], font=(theme.get("font_family", "Segoe UI"), 8),
             command=self._toggle_mic_test,
         )
         self.test_btn.pack(side="right")
@@ -212,30 +308,31 @@ class SettingsWindow:
         r1 = tk.Radiobutton(
             content, text="Push-to-Talk (Hold Hotkey to Speak, Release to Paste)",
             variable=self.rec_mode_var, value="push_to_talk",
-            bg="#1e1e2e", fg="#cdd6f4", selectcolor="#313244", activebackground="#1e1e2e", font=("Segoe UI", 9),
+            bg=theme["bg_primary"], fg=theme["fg_primary"], selectcolor=theme["bg_tertiary"],
+            activebackground=theme["bg_primary"], font=(theme.get("font_family", "Segoe UI"), 9),
         )
         r1.pack(anchor="w", pady=2)
 
         r2 = tk.Radiobutton(
             content, text="Toggle Mode (Press Hotkey once to Start, Press again to Stop)",
             variable=self.rec_mode_var, value="toggle",
-            bg="#1e1e2e", fg="#cdd6f4", selectcolor="#313244", activebackground="#1e1e2e", font=("Segoe UI", 9),
+            bg=theme["bg_primary"], fg=theme["fg_primary"], selectcolor=theme["bg_tertiary"],
+            activebackground=theme["bg_primary"], font=(theme.get("font_family", "Segoe UI"), 9),
         )
         r2.pack(anchor="w", pady=2)
 
         r3 = tk.Radiobutton(
             content, text="Hands-Free VAD (Start with Hotkey, Auto-stops after silence)",
             variable=self.rec_mode_var, value="vad",
-            bg="#1e1e2e", fg="#cdd6f4", selectcolor="#313244", activebackground="#1e1e2e", font=("Segoe UI", 9),
+            bg=theme["bg_primary"], fg=theme["fg_primary"], selectcolor=theme["bg_tertiary"],
+            activebackground=theme["bg_primary"], font=(theme.get("font_family", "Segoe UI"), 9),
         )
         r3.pack(anchor="w", pady=(2, 16))
 
     def _on_refresh_devices(self) -> None:
-        """Handle Refresh Devices button click."""
         self._refresh_devices(force=True)
 
     def _refresh_devices(self, force: bool = False) -> None:
-        """Enumerate audio devices, update combobox, and select appropriate device."""
         devices = AudioEngine.list_input_devices(force_refresh=force)
         self._device_map = {}
         labels: List[str] = []
@@ -273,8 +370,6 @@ class SettingsWindow:
                 selected_label = label
 
         self.mic_combo["values"] = labels
-
-        # Select saved device, or default device, or first item
         target_label = selected_label or default_label or (labels[0] if labels else "")
         self.mic_var.set(target_label)
         if hasattr(self, "mic_status_lbl"):
@@ -289,7 +384,8 @@ class SettingsWindow:
         frame = ttk.Frame(notebook)
         notebook.add(frame, text="⚡ Whisper Model")
 
-        content = tk.Frame(frame, bg="#1e1e2e", padx=16, pady=16)
+        theme = theme_manager.current_theme
+        content = tk.Frame(frame, bg=theme["bg_primary"], padx=16, pady=16)
         content.pack(fill="both", expand=True)
 
         # Model Selector
@@ -303,7 +399,7 @@ class SettingsWindow:
         model_combo.pack(anchor="w", pady=(0, 8))
 
         # Hardware Recommendation Box
-        note_frame = tk.Frame(content, bg="#181825", padx=10, pady=8)
+        note_frame = tk.Frame(content, bg=theme["bg_secondary"], padx=10, pady=8)
         note_frame.pack(fill="x", pady=(0, 12))
 
         note_text = (
@@ -314,26 +410,28 @@ class SettingsWindow:
         tk.Label(
             note_frame,
             text=note_text,
-            bg="#181825",
-            fg="#a6adc8",
-            font=("Segoe UI", 8),
+            bg=theme["bg_secondary"],
+            fg=theme["fg_secondary"],
+            font=(theme.get("font_family", "Segoe UI"), 8),
             justify="left",
             anchor="w",
         ).pack(fill="x")
 
         # Device & Compute
         ttk.Label(content, text="Acceleration Device", style="Header.TLabel").pack(anchor="w", pady=(0, 4))
-        dev_frame = tk.Frame(content, bg="#1e1e2e")
+        dev_frame = tk.Frame(content, bg=theme["bg_primary"])
         dev_frame.pack(anchor="w", pady=(0, 12))
 
         self.whisper_dev_var = tk.StringVar(value=config.get("whisper_device", "cuda"))
         tk.Radiobutton(
             dev_frame, text="GPU (CUDA float16)", variable=self.whisper_dev_var, value="cuda",
-            bg="#1e1e2e", fg="#cdd6f4", selectcolor="#313244", font=("Segoe UI", 9),
+            bg=theme["bg_primary"], fg=theme["fg_primary"], selectcolor=theme["bg_tertiary"],
+            font=(theme.get("font_family", "Segoe UI"), 9),
         ).pack(side="left", padx=(0, 12))
         tk.Radiobutton(
             dev_frame, text="CPU (int8)", variable=self.whisper_dev_var, value="cpu",
-            bg="#1e1e2e", fg="#cdd6f4", selectcolor="#313244", font=("Segoe UI", 9),
+            bg=theme["bg_primary"], fg=theme["fg_primary"], selectcolor=theme["bg_tertiary"],
+            font=(theme.get("font_family", "Segoe UI"), 9),
         ).pack(side="left")
 
         # Language
@@ -346,9 +444,12 @@ class SettingsWindow:
         lang_combo = ttk.Combobox(content, textvariable=self.lang_var, values=lang_labels, state="readonly", width=36)
         lang_combo.pack(anchor="w", pady=(0, 12))
 
-        # Initial Prompt (Vocabulary / Slang / Code-switching)
+        # Initial Prompt
         ttk.Label(content, text="Initial Prompt (Custom vocabulary / names / Hinglish guide)", style="Header.TLabel").pack(anchor="w", pady=(0, 4))
-        self.init_prompt_txt = tk.Text(content, height=3, bg="#181825", fg="#cdd6f4", insertbackground="#cdd6f4", font=("Segoe UI", 9))
+        self.init_prompt_txt = tk.Text(
+            content, height=3, bg=theme["bg_secondary"], fg=theme["fg_primary"],
+            insertbackground=theme["fg_primary"], font=(theme.get("font_family", "Segoe UI"), 9)
+        )
         self.init_prompt_txt.pack(fill="x", pady=(0, 4))
         self.init_prompt_txt.insert("1.0", config.get("whisper_initial_prompt", ""))
 
@@ -358,11 +459,12 @@ class SettingsWindow:
         frame = ttk.Frame(notebook)
         notebook.add(frame, text="🧠 AI Refiners")
 
-        content = tk.Frame(frame, bg="#1e1e2e", padx=16, pady=16)
+        theme = theme_manager.current_theme
+        content = tk.Frame(frame, bg=theme["bg_primary"], padx=16, pady=16)
         content.pack(fill="both", expand=True)
 
         ttk.Label(content, text="AI Backend Provider", style="Header.TLabel").pack(anchor="w", pady=(0, 4))
-        
+
         self.ai_backend_var = tk.StringVar(value=config.get("ai_backend", "ollama"))
         backends = [
             ("ollama", "Local Ollama (100% Offline & Private)"),
@@ -374,40 +476,41 @@ class SettingsWindow:
         for val, label in backends:
             tk.Radiobutton(
                 content, text=label, variable=self.ai_backend_var, value=val,
-                bg="#1e1e2e", fg="#cdd6f4", selectcolor="#313244", font=("Segoe UI", 9),
+                bg=theme["bg_primary"], fg=theme["fg_primary"], selectcolor=theme["bg_tertiary"],
+                font=(theme.get("font_family", "Segoe UI"), 9),
             ).pack(anchor="w", pady=1)
 
         # Ollama Model & URL
-        ollama_frame = tk.LabelFrame(content, text="Ollama Settings", bg="#1e1e2e", fg="#89b4fa", padx=8, pady=6)
+        ollama_frame = tk.LabelFrame(content, text="Ollama Settings", bg=theme["bg_primary"], fg=theme["accent"], padx=8, pady=6)
         ollama_frame.pack(fill="x", pady=(8, 4))
 
-        tk.Label(ollama_frame, text="Model:", bg="#1e1e2e", fg="#cdd6f4", font=("Segoe UI", 9)).grid(row=0, column=0, sticky="w")
+        tk.Label(ollama_frame, text="Model:", bg=theme["bg_primary"], fg=theme["fg_primary"], font=(theme.get("font_family", "Segoe UI"), 9)).grid(row=0, column=0, sticky="w")
         self.ollama_model_var = tk.StringVar(value=config.get("ollama_model", "qwen3:8b"))
         ollama_models = ["qwen2.5:0.5b", "qwen2.5:1.5b", "qwen2.5:3b", "qwen2.5:7b", "llama3.1:8b", "phi3:mini", "gemma2:2b", "gemma2:9b", "qwen3:8b"]
         ttk.Combobox(ollama_frame, textvariable=self.ollama_model_var, values=ollama_models, width=22).grid(row=0, column=1, padx=6, sticky="w")
 
-        # Groq API Key
-        groq_frame = tk.LabelFrame(content, text="Cloud API Keys", bg="#1e1e2e", fg="#89b4fa", padx=8, pady=6)
+        # Cloud API Keys
+        groq_frame = tk.LabelFrame(content, text="Cloud API Keys", bg=theme["bg_primary"], fg=theme["accent"], padx=8, pady=6)
         groq_frame.pack(fill="x", pady=(6, 8))
 
-        tk.Label(groq_frame, text="Groq Key:", bg="#1e1e2e", fg="#cdd6f4", font=("Segoe UI", 9)).grid(row=0, column=0, sticky="w")
+        tk.Label(groq_frame, text="Groq Key:", bg=theme["bg_primary"], fg=theme["fg_primary"], font=(theme.get("font_family", "Segoe UI"), 9)).grid(row=0, column=0, sticky="w")
         self.groq_key_var = tk.StringVar(value=config.get("groq_api_key", ""))
-        tk.Entry(groq_frame, textvariable=self.groq_key_var, show="•", bg="#181825", fg="#cdd6f4", width=36).grid(row=0, column=1, padx=6, pady=2, sticky="w")
+        tk.Entry(groq_frame, textvariable=self.groq_key_var, show="•", bg=theme["bg_secondary"], fg=theme["fg_primary"], width=36).grid(row=0, column=1, padx=6, pady=2, sticky="w")
 
-        tk.Label(groq_frame, text="OpenAI Key:", bg="#1e1e2e", fg="#cdd6f4", font=("Segoe UI", 9)).grid(row=1, column=0, sticky="w")
+        tk.Label(groq_frame, text="OpenAI Key:", bg=theme["bg_primary"], fg=theme["fg_primary"], font=(theme.get("font_family", "Segoe UI"), 9)).grid(row=1, column=0, sticky="w")
         self.openai_key_var = tk.StringVar(value=config.get("openai_api_key", ""))
-        tk.Entry(groq_frame, textvariable=self.openai_key_var, show="•", bg="#181825", fg="#cdd6f4", width=36).grid(row=1, column=1, padx=6, pady=2, sticky="w")
+        tk.Entry(groq_frame, textvariable=self.openai_key_var, show="•", bg=theme["bg_secondary"], fg=theme["fg_primary"], width=36).grid(row=1, column=1, padx=6, pady=2, sticky="w")
 
         # Test Backend Button
-        test_frame = tk.Frame(content, bg="#1e1e2e")
+        test_frame = tk.Frame(content, bg=theme["bg_primary"])
         test_frame.pack(fill="x", pady=4)
 
-        self.backend_status_lbl = tk.Label(test_frame, text="Status: Ready to test", bg="#1e1e2e", fg="#a6adc8", font=("Segoe UI", 9))
+        self.backend_status_lbl = tk.Label(test_frame, text="Status: Ready to test", bg=theme["bg_primary"], fg=theme["fg_secondary"], font=(theme.get("font_family", "Segoe UI"), 9))
         self.backend_status_lbl.pack(side="left")
 
         tk.Button(
-            test_frame, text="Test Connection", bg="#313244", fg="#cdd6f4",
-            activebackground="#45475a", font=("Segoe UI", 8),
+            test_frame, text="Test Connection", bg=theme["bg_tertiary"], fg=theme["fg_primary"],
+            activebackground=theme["accent_hover"], font=(theme.get("font_family", "Segoe UI"), 8),
             command=self._test_backend_connection,
         ).pack(side="right")
 
@@ -417,11 +520,12 @@ class SettingsWindow:
         frame = ttk.Frame(notebook)
         notebook.add(frame, text="✍️ Mode Prompts")
 
-        content = tk.Frame(frame, bg="#1e1e2e", padx=16, pady=16)
+        theme = theme_manager.current_theme
+        content = tk.Frame(frame, bg=theme["bg_primary"], padx=16, pady=16)
         content.pack(fill="both", expand=True)
 
         ttk.Label(content, text="Select Mode to Edit", style="Header.TLabel").pack(anchor="w", pady=(0, 4))
-        
+
         modes = config.all_modes
         mode_keys = list(modes.keys())
         self.selected_mode_key = tk.StringVar(value=config.get("current_mode", "smart"))
@@ -435,10 +539,9 @@ class SettingsWindow:
         mode_picker.bind("<<ComboboxSelected>>", self._on_mode_selected_in_editor)
 
         ttk.Label(content, text="System Prompt for Mode:", style="Header.TLabel").pack(anchor="w", pady=(4, 2))
-        self.mode_prompt_txt = tk.Text(content, height=10, bg="#181825", fg="#cdd6f4", insertbackground="#cdd6f4", font=("Segoe UI", 9))
+        self.mode_prompt_txt = tk.Text(content, height=10, bg=theme["bg_secondary"], fg=theme["fg_primary"], insertbackground=theme["fg_primary"], font=(theme.get("font_family", "Segoe UI"), 9))
         self.mode_prompt_txt.pack(fill="both", expand=True, pady=(0, 8))
 
-        # Populate prompt text
         curr_key = self.selected_mode_key.get().split(" — ")[0].strip()
         self.mode_prompt_txt.insert("1.0", modes.get(curr_key, {}).get("prompt", ""))
 
@@ -455,39 +558,38 @@ class SettingsWindow:
         frame = ttk.Frame(notebook)
         notebook.add(frame, text="⌨️ Hotkey & Paste")
 
-        content = tk.Frame(frame, bg="#1e1e2e", padx=16, pady=16)
+        theme = theme_manager.current_theme
+        content = tk.Frame(frame, bg=theme["bg_primary"], padx=16, pady=16)
         content.pack(fill="both", expand=True)
 
         ttk.Label(content, text="Global Dictation Hotkey", style="Header.TLabel").pack(anchor="w", pady=(0, 4))
         self.hotkey_var = tk.StringVar(value=config.get("hotkey", "ctrl+space"))
-        tk.Entry(content, textvariable=self.hotkey_var, bg="#181825", fg="#cdd6f4", font=("Segoe UI", 10), width=24).pack(anchor="w", pady=(0, 16))
-
-
+        tk.Entry(content, textvariable=self.hotkey_var, bg=theme["bg_secondary"], fg=theme["fg_primary"], font=(theme.get("font_family", "Segoe UI"), 10), width=24).pack(anchor="w", pady=(0, 16))
 
         # Checkboxes
         ttk.Label(content, text="Preferences", style="Header.TLabel").pack(anchor="w", pady=(0, 4))
         self.sound_var = tk.BooleanVar(value=config.get("sound_effects", True))
         tk.Checkbutton(
             content, text="Play audio chimes on recording start & stop",
-            variable=self.sound_var, bg="#1e1e2e", fg="#cdd6f4", selectcolor="#313244", font=("Segoe UI", 9),
+            variable=self.sound_var, bg=theme["bg_primary"], fg=theme["fg_primary"], selectcolor=theme["bg_tertiary"],
+            font=(theme.get("font_family", "Segoe UI"), 9),
         ).pack(anchor="w", pady=2)
 
         self.space_var = tk.BooleanVar(value=config.get("add_trailing_space", True))
         tk.Checkbutton(
             content, text="Add trailing space after pasted text",
-            variable=self.space_var, bg="#1e1e2e", fg="#cdd6f4", selectcolor="#313244", font=("Segoe UI", 9),
+            variable=self.space_var, bg=theme["bg_primary"], fg=theme["fg_primary"], selectcolor=theme["bg_tertiary"],
+            font=(theme.get("font_family", "Segoe UI"), 9),
         ).pack(anchor="w", pady=2)
 
     # ── Actions & Helpers ─────────────────────────────────────────
 
     def _get_selected_device(self) -> Tuple[Optional[int], str]:
-        """Safely extract device ID and name from current selection."""
         cur_val = self.mic_var.get().strip()
         if hasattr(self, "_device_map") and cur_val in self._device_map:
             d = self._device_map[cur_val]
             return d["id"], d["name"]
 
-        # Regex fallback: extract integer inside brackets [id] or before colon id:
         m = re.search(r'\[(\d+)\]', cur_val) or re.search(r'(\d+):', cur_val)
         if m:
             dev_id = int(m.group(1))
@@ -497,9 +599,10 @@ class SettingsWindow:
         return None, "Default Microphone"
 
     def _toggle_mic_test(self) -> None:
+        theme = theme_manager.current_theme
         if self._test_active:
             self._test_active = False
-            self.test_btn.config(text="Test Mic", bg="#313244")
+            self.test_btn.config(text="Test Mic", bg=theme["bg_tertiary"])
             self.meter_canvas.delete("all")
         else:
             self._test_active = True
@@ -530,8 +633,9 @@ class SettingsWindow:
                 self.win.after(0, self._on_mic_test_failed, str(e))
 
     def _on_mic_test_failed(self, err_msg: str) -> None:
+        theme = theme_manager.current_theme
         if hasattr(self, "test_btn") and self.test_btn.winfo_exists():
-            self.test_btn.config(text="Test Mic", bg="#313244")
+            self.test_btn.config(text="Test Mic", bg=theme["bg_tertiary"])
         if hasattr(self, "meter_canvas") and self.meter_canvas.winfo_exists():
             self.meter_canvas.delete("all")
         if hasattr(self, "mic_status_lbl") and self.mic_status_lbl.winfo_exists():
@@ -561,6 +665,23 @@ class SettingsWindow:
         threading.Thread(target=_worker, daemon=True).start()
 
     def _save_all(self) -> None:
+        # Appearance & Themes
+        if hasattr(self, "theme_picker_var") and self._theme_label_to_key:
+            sel_lbl = self.theme_picker_var.get()
+            chosen_key = self._theme_label_to_key.get(sel_lbl, "default_dark")
+            theme_manager.set_theme(chosen_key)
+
+        if hasattr(self, "hud_layout_var"):
+            chosen_layout = self.hud_layout_var.get()
+            config.set("hud_layout", chosen_layout)
+            if theme_applicator._hud and hasattr(theme_applicator._hud, "set_layout"):
+                theme_applicator._hud.set_layout(chosen_layout)
+
+        if hasattr(self, "font_family_var"):
+            chosen_font = self.font_family_var.get()
+            config.set("font_family", chosen_font)
+            theme_manager.current_theme["font_family"] = chosen_font
+
         # Mic Device
         dev_id, dev_name = self._get_selected_device()
         config.set("mic_device_id", dev_id)
@@ -600,11 +721,12 @@ class SettingsWindow:
 
         # Hotkeys & Preferences
         config.set("hotkey", self.hotkey_var.get().strip().lower())
-
         config.set("sound_effects", self.sound_var.get())
         config.set("add_trailing_space", self.space_var.get())
 
         config.save()
+        theme_applicator.apply_current_theme()
+
         messagebox.showinfo("LocalWhisper Pro", "Settings applied successfully!")
 
         if self.on_settings_changed:

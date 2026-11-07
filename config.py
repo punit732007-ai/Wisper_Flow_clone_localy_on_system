@@ -14,7 +14,11 @@ from typing import Any, Dict, List, Optional, Tuple
 
 # ─── Directories ──────────────────────────────────────────────────
 APP_DIR = Path.home() / ".localwhisper"
-APP_DIR.mkdir(parents=True, exist_ok=True)
+try:
+    APP_DIR.mkdir(parents=True, exist_ok=True)
+except Exception:
+    APP_DIR = Path(__file__).resolve().parent / ".localwhisper"
+    APP_DIR.mkdir(parents=True, exist_ok=True)
 
 SETTINGS_FILE = APP_DIR / "settings.json"
 HISTORY_FILE = APP_DIR / "history.json"
@@ -247,6 +251,11 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "floating_hud_enabled": True,
     "hud_position": None,              # [x, y] or None for bottom-center
     "hud_opacity": 0.96,
+    "hud_layout": "compact_pill",      # "compact_pill", "classic_bar", "expanded_card", "minimal_dot"
+    "app_theme": "default_dark",
+    "custom_theme": {},
+    "wallpaper_path": "",
+    "font_family": "Segoe UI",
 
     # Dictation Modes Store
     "dictation_modes": DEFAULT_DICTATION_MODES,

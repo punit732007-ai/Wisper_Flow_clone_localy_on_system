@@ -1,7 +1,8 @@
 """
 LocalWhisper Pro v3.0 — Main Entrypoint & Coordinator
 Orchestrates Audio Capture, Faster-Whisper GPU Inference, Multi-Mode AI Refiner,
-Direct Win32/Clipboard Pasting, Real-time HUD Visualizer, Settings, and System Tray.
+Direct Win32/Clipboard Pasting, Real-time HUD Visualizer, Dynamic 35+ Aesthetic Themes Studio,
+Settings, and System Tray.
 """
 
 import sys
@@ -29,7 +30,10 @@ from core.hotkey_manager import HotkeyManager
 from ui.floating_hud import FloatingHUD
 from ui.settings_window import SettingsWindow
 from ui.history_window import HistoryWindow
+from ui.theme_window import ThemeWindow
 from ui.tray_icon import SystemTray
+from ui.theme_engine import theme_manager
+from ui.theme_applicator import theme_applicator
 
 
 class LocalWhisperApp:
@@ -47,12 +51,19 @@ class LocalWhisperApp:
             on_cycle_mode=self.cycle_mode,
             on_open_settings=self.open_settings,
             on_open_history=self.open_history,
+            on_open_themes=self.open_themes,
             on_quit=self.shutdown,
+        )
+
+        self.theme_win = ThemeWindow(
+            parent_root=self.hud.root,
+            on_theme_changed=self.on_theme_changed,
         )
 
         self.settings_win = SettingsWindow(
             parent_root=self.hud.root,
             on_settings_changed=self.reload_settings,
+            on_open_themes=self.open_themes,
         )
 
         self.history_win = HistoryWindow(
@@ -62,6 +73,7 @@ class LocalWhisperApp:
         self.tray = SystemTray(
             on_toggle_hud=self._toggle_hud_visibility,
             on_open_settings=self.open_settings,
+            on_open_themes=self.open_themes,
             on_open_history=self.open_history,
             on_cycle_mode=self.cycle_mode,
             on_quit=self.shutdown,
@@ -75,11 +87,22 @@ class LocalWhisperApp:
             on_cancel_record=self.cancel_recording,
         )
 
+        # Register UI windows with ThemeApplicator for seamless live recoloring
+        theme_applicator.register_hud(self.hud)
+        theme_applicator.register_settings(self.settings_win)
+        theme_applicator.register_history(self.history_win)
+        theme_applicator.register_root(self.hud.root)
+
+        # Apply saved layout and theme
+        initial_layout = config.get("hud_layout", "compact_pill")
+        self.hud.set_layout(initial_layout)
+        theme_applicator.apply_current_theme()
+
     # ── Startup & Initialization ─────────────────────────────────
 
     def run(self) -> None:
         """Initialize background workers and start UI event loop."""
-        print("[LocalWhisper Pro] Starting v3.0...")
+        print("[LocalWhisper Pro] Starting v3.0 with 35+ Aesthetic Themes...")
 
         # 1. Start global hotkeys
         self.hotkeys.start()
@@ -130,7 +153,6 @@ class LocalWhisperApp:
             print(f"[Main] Failed to start recording: {e}")
             play_error()
             self.hud.schedule(self.hud.set_state, "error")
-            # Auto-revert HUD back to ready state after 1.5 seconds
             def _revert_ready():
                 time.sleep(1.5)
                 self.hud.schedule(self.hud.set_state, "ready")
@@ -211,7 +233,6 @@ class LocalWhisperApp:
             refine_time = time.perf_counter() - t_refine
 
             total_time = time.perf_counter() - t0
-            # Safe print: encode to ascii with replace to avoid UnicodeEncodeError on cp1252 terminals
             safe_text = refined_text.encode("ascii", errors="replace").decode("ascii")
             print(
                 f"[Pipeline] Whisper: {whisper_time:.2f}s | Refine: {refine_time:.2f}s | Total: {total_time:.2f}s\n"
@@ -259,6 +280,15 @@ class LocalWhisperApp:
     def open_settings(self) -> None:
         """Open the graphical settings dialog."""
         self.hud.schedule(self.settings_win.show)
+
+    def open_themes(self) -> None:
+        """Open the interactive Themes & Appearance studio."""
+        self.hud.schedule(self.theme_win.show)
+
+    def on_theme_changed(self) -> None:
+        """Notify application components when a theme is switched."""
+        print(f"[Main] Theme switched to: {theme_manager.current_theme.get('name')}")
+        self.hud.schedule(self.hud._apply_state_style)
 
     def open_history(self) -> None:
         """Open the transcript history drawer."""

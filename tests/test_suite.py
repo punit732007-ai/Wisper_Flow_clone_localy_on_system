@@ -1,7 +1,7 @@
 """
 LocalWhisper Pro v3.0 — Unified Test Suite Runner & Requirement Verification
-Executes all automated tests across Requirements R1-R5 and Tiers 1-4,
-displaying structured coverage metrics and results.
+Executes all automated tests across Requirements R1-R5, 35+ Aesthetic Themes Studio,
+and Tiers 1-4, displaying structured coverage metrics and results.
 """
 
 import sys
@@ -33,6 +33,8 @@ def run_full_test_suite() -> bool:
         TestCrossFeatureCombinations,
         TestRealWorldScenarios,
     )
+    from tests.test_themes import TestThemeEngine
+
     suite = unittest.TestSuite()
     loader = unittest.TestLoader()
 
@@ -45,6 +47,7 @@ def run_full_test_suite() -> bool:
         ("Tier 2: Boundary & Corner Cases", TestBoundaryAndCornerCases),
         ("Tier 3: Cross-Feature Combinations", TestCrossFeatureCombinations),
         ("Tier 4: Real-World Scenarios", TestRealWorldScenarios),
+        ("Tier 5: 35+ Aesthetic Themes Studio & Custom Palettes", TestThemeEngine),
     ]
 
     print("\n" + "=" * 70)

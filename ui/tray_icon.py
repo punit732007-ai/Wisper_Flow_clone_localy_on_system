@@ -1,7 +1,7 @@
 """
 LocalWhisper Pro — System Tray Icon
 Background tray icon with menu actions for showing/hiding HUD, opening Settings,
-browsing History, and cycling Dictation Modes.
+browsing Themes & Customization, browsing History, and cycling Dictation Modes.
 """
 
 import threading
@@ -18,12 +18,14 @@ class SystemTray:
         self,
         on_toggle_hud: Optional[Callable[[], None]] = None,
         on_open_settings: Optional[Callable[[], None]] = None,
+        on_open_themes: Optional[Callable[[], None]] = None,
         on_open_history: Optional[Callable[[], None]] = None,
         on_cycle_mode: Optional[Callable[[], None]] = None,
         on_quit: Optional[Callable[[], None]] = None,
     ):
         self.on_toggle_hud = on_toggle_hud
         self.on_open_settings = on_open_settings
+        self.on_open_themes = on_open_themes
         self.on_open_history = on_open_history
         self.on_cycle_mode = on_cycle_mode
         self.on_quit = on_quit
@@ -56,6 +58,7 @@ class SystemTray:
             pystray.MenuItem("Show/Hide HUD", lambda icon, item: self._safe_call(self.on_toggle_hud), default=True),
             pystray.MenuItem(_get_mode_label, lambda icon, item: self._safe_call(self.on_cycle_mode)),
             pystray.Menu.SEPARATOR,
+            pystray.MenuItem("🎨 Themes & Customization...", lambda icon, item: self._safe_call(self.on_open_themes)),
             pystray.MenuItem("⚙️ Settings...", lambda icon, item: self._safe_call(self.on_open_settings)),
             pystray.MenuItem("📜 History...", lambda icon, item: self._safe_call(self.on_open_history)),
             pystray.Menu.SEPARATOR,

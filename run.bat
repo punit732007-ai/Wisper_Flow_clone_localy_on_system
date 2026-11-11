@@ -3,6 +3,7 @@ chcp 65001 >nul
 title LocalWhisper Pro v3.3
 cd /d "%~dp0"
 set PYTHONUNBUFFERED=1
+set HF_HUB_DISABLE_SYMLINKS_WARNING=1
 
 if exist ".venv\Scripts\python.exe" (
     ".venv\Scripts\python.exe" main.py %*

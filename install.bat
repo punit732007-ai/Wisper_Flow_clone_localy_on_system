@@ -1,6 +1,7 @@
 @echo off
 title LocalWhisper Pro v3.3 — One-Click Setup
 cd /d "%~dp0"
+set HF_HUB_DISABLE_SYMLINKS_WARNING=1
 
 echo ===================================================
 echo   LocalWhisper Pro v3.3 — Installation & Setup

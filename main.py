@@ -5,7 +5,11 @@ Direct Win32/Clipboard Pasting, Real-time HUD Visualizer, Dynamic 35+ Aesthetic 
 Settings, and System Tray.
 """
 
+import os
 import sys
+
+# Suppress harmless HuggingFace symlinks warning on Windows
+os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
 
 # Force UTF-8 encoding for Windows terminals to prevent UnicodeEncodeError crashes
 if sys.platform == "win32":
@@ -124,6 +128,7 @@ class LocalWhisperApp:
             ai_refiner.check_backend_status()
             elapsed = time.perf_counter() - t0
             print(f"[LocalWhisper Pro] All systems initialized in {elapsed:.1f}s — Ready!")
+            print(f"[LocalWhisper Pro] Press or hold '{config.get('hotkey', 'ctrl+space')}' to dictate!")
             self.hud.schedule(self.hud.set_state, "ready")
         except Exception as exc:
             print(f"[LocalWhisper Pro] Initialization error: {exc}")

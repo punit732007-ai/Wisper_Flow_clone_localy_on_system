@@ -5,6 +5,7 @@ Features CUDA hardware auto-acceleration, warm-up caching, and bilingual English
 """
 
 import os
+os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
 import time
 import threading
 from typing import Tuple, Optional, List

@@ -585,7 +585,7 @@ class SettingsWindow:
 
         # Checkboxes
         ttk.Label(content, text="Preferences", style="Header.TLabel").pack(anchor="w", pady=(0, 4))
-        self.sound_var = tk.BooleanVar(value=config.get("sound_effects", True))
+        self.sound_var = tk.BooleanVar(value=config.get("sound_effects", False))
         tk.Checkbutton(
             content, text="Play audio chimes on recording start & stop",
             variable=self.sound_var, bg=theme["bg_primary"], fg=theme["fg_primary"], selectcolor=theme["bg_tertiary"],

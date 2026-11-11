@@ -252,8 +252,8 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "clipboard_restore_delay": 0.4,
     "add_trailing_space": True,
 
-    # Sound Cues & UI
-    "sound_effects": True,
+    # Sound Cues & UI (disabled by default for smooth, silent operation)
+    "sound_effects": False,
     "floating_hud_enabled": True,
     "hud_position": None,              # [x, y] or None for bottom-center
     "hud_opacity": 0.96,

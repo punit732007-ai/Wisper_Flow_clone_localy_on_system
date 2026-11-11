@@ -1,7 +1,7 @@
 """
 LocalWhisper Pro — Sound Effects Engine
-Provides subtle, non-intrusive audio cues for recording start, stop, success, and error.
-Uses winsound on Windows without needing external asset files.
+Provides smooth native Windows system chimes or completely silent operation.
+Completely eliminates harsh PC speaker/buzzer beeps.
 """
 
 import sys
@@ -9,16 +9,17 @@ import threading
 from config import config
 
 
-def _play_tone(frequency: int, duration_ms: int):
-    """Play a synthesized audio tone in a background thread."""
-    if not config.get("sound_effects", True):
+def _play_native_chime(sound_type: int = 0):
+    """Play a gentle native Windows chime if sound effects are enabled."""
+    if not config.get("sound_effects", False):
         return
 
     def _worker():
         try:
             if sys.platform == "win32":
                 import winsound
-                winsound.Beep(frequency, duration_ms)
+                # MessageBeep uses smooth Windows OS audio device events (not PC motherboard buzzer)
+                winsound.MessageBeep(sound_type)
         except Exception:
             pass
 
@@ -26,60 +27,22 @@ def _play_tone(frequency: int, duration_ms: int):
 
 
 def play_start():
-    """Crisp rising tone for recording start."""
-    def _worker():
-        if not config.get("sound_effects", True):
-            return
-        try:
-            if sys.platform == "win32":
-                import winsound
-                winsound.Beep(880, 70)   # A5
-                winsound.Beep(1174, 90)  # D6
-        except Exception:
-            pass
-    threading.Thread(target=_worker, daemon=True).start()
+    """Silent by default during recording start."""
+    pass
 
 
 def play_stop():
-    """Soft tone indicating recording finished."""
-    def _worker():
-        if not config.get("sound_effects", True):
-            return
-        try:
-            if sys.platform == "win32":
-                import winsound
-                winsound.Beep(987, 80)   # B5
-                winsound.Beep(784, 70)   # G5
-        except Exception:
-            pass
-    threading.Thread(target=_worker, daemon=True).start()
+    """Silent by default when recording ends."""
+    pass
 
 
 def play_success():
-    """Pleasant chime for successful transcription and paste."""
-    def _worker():
-        if not config.get("sound_effects", True):
-            return
-        try:
-            if sys.platform == "win32":
-                import winsound
-                winsound.Beep(1046, 60)  # C6
-                winsound.Beep(1318, 90)  # E6
-        except Exception:
-            pass
-    threading.Thread(target=_worker, daemon=True).start()
+    """Subtle Windows chime for success (only if user explicitly enables sound in settings)."""
+    if config.get("sound_effects", False):
+        _play_native_chime(0)  # MB_OK
 
 
 def play_error():
-    """Low alert tone for error."""
-    def _worker():
-        if not config.get("sound_effects", True):
-            return
-        try:
-            if sys.platform == "win32":
-                import winsound
-                winsound.Beep(440, 150)  # A4
-                winsound.Beep(330, 200)  # E4
-        except Exception:
-            pass
-    threading.Thread(target=_worker, daemon=True).start()
+    """Subtle Windows alert for errors (only if user explicitly enables sound in settings)."""
+    if config.get("sound_effects", False):
+        _play_native_chime(0x00000010)  # MB_ICONHAND

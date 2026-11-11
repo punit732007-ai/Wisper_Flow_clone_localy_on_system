@@ -83,11 +83,21 @@ def register_command():
         user_home / ".localwhisper" / "bin",
     ]
 
-    # Create root workspace run_silent.vbs
-    vbs_content = f'''Set WshShell = CreateObject("WScript.Shell")
-WshShell.CurrentDirectory = "{workspace}"
-WshShell.Run Chr(34) & "{workspace / '.venv' / 'Scripts' / 'python.exe'}" & Chr(34) & " main.py", 0, False
+    # Create root workspace run_silent.vbs with dynamic relative paths
+    vbs_content = '''Set WshShell = CreateObject("WScript.Shell")
+Set fso = CreateObject("Scripting.FileSystemObject")
+currentDir = fso.GetParentFolderName(WScript.ScriptFullName)
+pythonExe = currentDir & "\\.venv\\Scripts\\python.exe"
+
+If fso.FileExists(pythonExe) Then
+    WshShell.CurrentDirectory = currentDir
+    WshShell.Run Chr(34) & pythonExe & Chr(34) & " main.py", 0, False
+Else
+    WshShell.CurrentDirectory = currentDir
+    WshShell.Run Chr(34) & currentDir & "\\run.bat" & Chr(34), 1, False
+End If
 Set WshShell = Nothing
+Set fso = Nothing
 '''
     try:
         with open(workspace / "run_silent.vbs", "w", encoding="utf-8") as f:

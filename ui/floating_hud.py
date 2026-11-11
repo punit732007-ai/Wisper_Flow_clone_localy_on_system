@@ -137,36 +137,42 @@ HUD_STATES = {
         "dot_color": "#00b4d8",
         "bg": "#141624",
         "border": "#00b4d8",
+        "specular": "#90e0ef",
     },
     "ready": {
         "text": "Ready",
         "dot_color": "#52b788",
         "bg": "#141624",
         "border": "#2e3450",
+        "specular": "#4a5578",
     },
     "recording": {
         "text": "Listening...",
         "dot_color": "#ff4d6d",
         "bg": "#26121a",
         "border": "#ff4d6d",
+        "specular": "#ff85a1",
     },
     "processing": {
         "text": "Refining...",
         "dot_color": "#ffb703",
         "bg": "#221c10",
         "border": "#ffb703",
+        "specular": "#ffd166",
     },
     "success": {
         "text": "Pasted!",
         "dot_color": "#70e000",
         "bg": "#122418",
         "border": "#70e000",
+        "specular": "#9ef01a",
     },
     "error": {
         "text": "Error",
         "dot_color": "#e63946",
         "bg": "#261012",
         "border": "#e63946",
+        "specular": "#f28482",
     },
 }
 
@@ -237,6 +243,18 @@ class FloatingHUD:
         pill_pts = self._make_rounded_pill_points(2, 2, self._width - 2, self._height - 2, r)
         self.pill_bg_id = self.canvas.create_polygon(
             pill_pts, smooth=True, fill=theme["hud_bg"], outline=theme["hud_border"], width=1.5
+        )
+
+        # Specular Highlight Arc (dual-layer overhead frosted glass reflection)
+        spec_col = theme.get("hud_specular", theme.get("hud_border", "#ffffff"))
+        spec_x1 = r + 2
+        spec_x2 = max(spec_x1 + 1, self._width - r - 2)
+        self.pill_specular_id = self.canvas.create_line(
+            spec_x1, 3,
+            spec_x2, 3,
+            fill=spec_col,
+            width=1.5,
+            capstyle="round",
         )
 
         # Status Dot
@@ -351,7 +369,8 @@ class FloatingHUD:
         """Set HUD visual state (ready, recording, processing, success, error)."""
         if state in HUD_STATES:
             self._state = state
-            self.visualizer.set_state(state)
+            st = HUD_STATES[state]
+            self.visualizer.set_state(state, custom_color=st.get("dot_color"))
             self._apply_state_style()
 
     def update_audio_levels(self, rms: float, bands: list) -> None:
@@ -394,6 +413,12 @@ class FloatingHUD:
         pill_pts = self._make_rounded_pill_points(2, 2, self._width - 2, self._height - 2, cfg["radius"])
         self.canvas.coords(self.pill_bg_id, *pill_pts)
 
+        # Reposition Specular Highlight Arc
+        r = cfg["radius"]
+        spec_x1 = r + 2
+        spec_x2 = max(spec_x1 + 1, self._width - r - 2)
+        self.canvas.coords(self.pill_specular_id, spec_x1, 3, spec_x2, 3)
+
         # Reposition Status Dot
         dot_x, dot_y = cfg["dot_x"], self._height // 2
         dot_r = 4
@@ -422,7 +447,12 @@ class FloatingHUD:
         st = HUD_STATES.get(self._state, HUD_STATES["ready"])
 
         self.canvas.itemconfig(self.pill_bg_id, fill=st["bg"], outline=st["border"])
+        specular_color = st.get("specular") or theme.get("hud_specular", theme.get("hud_border", "#ffffff"))
+        self.canvas.itemconfig(self.pill_specular_id, fill=specular_color)
         self.canvas.itemconfig(self.dot_id, fill=st["dot_color"])
+
+        # Synchronize visualizer bar color with active state
+        self.visualizer.set_state(self._state, custom_color=st.get("dot_color"))
 
         # Update badge text and colors
         mode_info = config.current_mode_info

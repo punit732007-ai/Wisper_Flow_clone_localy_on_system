@@ -19,14 +19,16 @@ if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
 def run_test():
     print("[1/4] Initializing Transcriber & AI Refiner...")
     from config import config
-    from core.transcriber import Transcriber
+    from core.transcriber import Transcriber, _find_cached_models
     from core.ai_refiner import ai_refiner
     from core.history_manager import history_manager
 
-    config.set("whisper_model", "small", auto_save=False)
+    cached = _find_cached_models()
+    model_to_test = cached[0] if cached else config.get("whisper_model", "medium")
+    config.set("whisper_model", model_to_test, auto_save=False)
     transcriber = Transcriber()
     transcriber.load_model()
-    print("  [OK] Model loaded.")
+    print(f"  [OK] Model '{model_to_test}' loaded.")
 
     print("[2/4] Generating synthetic test audio signal (16kHz float32)...")
     # 2 seconds of 16kHz sine wave audio

@@ -42,7 +42,7 @@ if sys.platform == "win32":
             ("_union", _INPUT_UNION),
         ]
 
-    _user32 = ctypes.windll.user32
+    _user32 = ctypes.WinDLL("user32", use_last_error=True)
     _SendInput = _user32.SendInput
     _SendInput.argtypes = (wintypes.UINT, ctypes.POINTER(INPUT), ctypes.c_int)
     _SendInput.restype = wintypes.UINT
@@ -128,8 +128,24 @@ def _get_pynput_controller():
 
 
 def paste_text(text: str) -> None:
-    """Universal paste dispatcher. Types text at the active cursor position."""
+    """Universal paste dispatcher. Types text at the active cursor position according to settings."""
     if not text or not text.strip():
+        return
+
+    # Handle trailing space option
+    if config.get("add_trailing_space", True) and not text.endswith((" ", "\n", "\t")):
+        text = text + " "
+
+    method = config.get("paste_method", "clipboard")
+
+    # Explicit clipboard paste mode
+    if method == "clipboard":
+        paste_via_clipboard(text)
+        return
+
+    # Explicit sendinput mode
+    if method == "sendinput":
+        type_unicode_direct(text)
         return
 
     # Release Ctrl and Shift only (NOT Alt/Win — those trigger menus and close apps)
@@ -144,11 +160,7 @@ def paste_text(text: str) -> None:
     except Exception:
         pass
 
-    # Handle trailing space option
-    if config.get("add_trailing_space", True) and not text.endswith((" ", "\n", "\t")):
-        text = text + " "
-
-    # Strategy 1: pynput direct typing (best — no clipboard, types at cursor)
+    # Strategy 1: pynput direct typing
     try:
         kb = _get_pynput_controller()
         kb.type(text)
@@ -157,7 +169,7 @@ def paste_text(text: str) -> None:
     except Exception as e:
         print(f"[Paster] pynput.type() failed: {e}")
 
-    # Strategy 2: Win32 SendInput (fallback — also types at cursor, no clipboard)
+    # Strategy 2: Win32 SendInput (fallback)
     try:
         type_unicode_direct(text)
         print(f"[Paster] Typed {len(text)} chars (sendinput) OK")

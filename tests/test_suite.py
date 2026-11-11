@@ -1,7 +1,10 @@
 """
-LocalWhisper Pro v3.0 — Unified Test Suite Runner & Requirement Verification
-Executes all automated tests across Requirements R1-R5, 35+ Aesthetic Themes Studio,
-and Tiers 1-4, displaying structured coverage metrics and results.
+LocalWhisper Pro — Master Test Suite Runner & E2E Test Suite Consolidation
+Consolidates and executes all automated unit, integration, and adversarial stress tests across:
+- Milestone 1: 35+ Aesthetic Themes Studio, Glassmorphism, Liquid Glass, HUD Specular Highlights
+- Milestone 2: Other / Custom OpenAI-compatible Model Provider, Settings UI, Connectivity Check, Inference Fallbacks
+- Milestone 1 & 2 Adversarial Stress & Concurrency Test Suites
+- Graceful isolation and skipping of optional ML dependencies (e.g. numpy, sounddevice) when running in lightweight environments.
 """
 
 import sys
@@ -10,19 +13,41 @@ import time
 import unittest
 from pathlib import Path
 
-# Ensure UTF-8 stdout encoding on Windows
-if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
-    try:
-        sys.stdout.reconfigure(encoding="utf-8")
-    except Exception:
-        pass
+# Ensure UTF-8 stdout & stderr encoding on Windows
+if sys.platform == "win32":
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
+    if hasattr(sys.stderr, "reconfigure"):
+        try:
+            sys.stderr.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-def run_full_test_suite() -> bool:
-    """Execute the entire test suite and return True if all tests pass."""
+# ─── 1. Core Milestone Test Imports (Always Available) ───────────────────────
+from tests.test_themes import TestThemeEngine
+from tests.test_custom_provider import (
+    TestCustomProviderConfig,
+    TestCustomBackendStatus,
+    TestCustomProviderInference,
+    TestCustomProviderSettingsUI,
+)
+from tests.test_m1_adversarial_stress import TestM1AdversarialStress
+from tests.test_m2_adversarial_stress import TestM2AdversarialStress
+
+# ─── 2. Optional ML Wheel / Audio Buffer Test Probing ────────────────────────
+OPTIONAL_ML_TESTS = []
+OPTIONAL_ML_SKIPPED_REASON = None
+
+try:
+    import numpy
+    import sounddevice
     from tests.test_v3_requirements import (
         TestLanguageRestrictionR1,
         TestDictationModePromptsR2,
@@ -33,12 +58,7 @@ def run_full_test_suite() -> bool:
         TestCrossFeatureCombinations,
         TestRealWorldScenarios,
     )
-    from tests.test_themes import TestThemeEngine
-
-    suite = unittest.TestSuite()
-    loader = unittest.TestLoader()
-
-    test_classes = [
+    OPTIONAL_ML_TESTS = [
         ("Tier 1: R1 Language Support Restriction", TestLanguageRestrictionR1),
         ("Tier 1: R2 Dictation Mode Prompts Overhaul", TestDictationModePromptsR2),
         ("Tier 1: R3 Microphone Subsystem & Refresh", TestMicrophoneSubsystemR3),
@@ -47,12 +67,47 @@ def run_full_test_suite() -> bool:
         ("Tier 2: Boundary & Corner Cases", TestBoundaryAndCornerCases),
         ("Tier 3: Cross-Feature Combinations", TestCrossFeatureCombinations),
         ("Tier 4: Real-World Scenarios", TestRealWorldScenarios),
-        ("Tier 5: 35+ Aesthetic Themes Studio & Custom Palettes", TestThemeEngine),
     ]
+except ImportError as exc:
+    OPTIONAL_ML_SKIPPED_REASON = f"Optional ML packages not installed in environment ({exc})"
 
-    print("\n" + "=" * 70)
-    print("  LOCALWHISPER PRO v3.0 — AUTOMATED TEST SUITE EXECUTION")
-    print("=" * 70)
+
+# ─── 3. Test Registry Definition ─────────────────────────────────────────────
+ACTIVE_TEST_CLASSES = [
+    ("M1: 35+ Aesthetic Themes Studio & Custom Palettes", TestThemeEngine),
+    ("M2: Custom Provider Config & Persistence", TestCustomProviderConfig),
+    ("M2: Custom Provider Connectivity & Auth Verification", TestCustomBackendStatus),
+    ("M2: Custom Provider Inference & Fallback Engine", TestCustomProviderInference),
+    ("M2: Custom Provider Settings UI & In-Memory Staging", TestCustomProviderSettingsUI),
+    ("M1: HUD Concurrency & Animation Adversarial Stress", TestM1AdversarialStress),
+    ("M2: Custom Provider Hostile Adversarial Stress", TestM2AdversarialStress),
+]
+
+ALL_TEST_CLASSES = ACTIVE_TEST_CLASSES + OPTIONAL_ML_TESTS
+
+
+def load_tests(loader, standard_tests, pattern):
+    """Standard unittest load_tests protocol for discovery and test runner integration."""
+    suite = unittest.TestSuite()
+    for _, cls in ALL_TEST_CLASSES:
+        suite.addTests(loader.loadTestsFromTestCase(cls))
+    return suite
+
+
+def run_full_test_suite() -> bool:
+    """Execute the entire consolidated test suite and return True if all tests pass."""
+    suite = unittest.TestSuite()
+    loader = unittest.TestLoader()
+
+    print("\n" + "=" * 78)
+    print("  LOCALWHISPER PRO — CONSOLIDATED MASTER TEST RUNNER")
+    print("=" * 78)
+
+    if OPTIONAL_ML_SKIPPED_REASON:
+        print(f"  ℹ️  Notice: {OPTIONAL_ML_SKIPPED_REASON}")
+        print("     Legacy ASR audio buffer tests (Tiers 1-4) safely isolated.")
+        print("     Active suites (Themes, Custom Provider, Adversarial Stress) running.")
+        print("-" * 78)
 
     total_tests = 0
     passed_count = 0
@@ -61,7 +116,7 @@ def run_full_test_suite() -> bool:
 
     t_start = time.perf_counter()
 
-    for category_name, cls in test_classes:
+    for category_name, cls in ALL_TEST_CLASSES:
         sub_suite = loader.loadTestsFromTestCase(cls)
         count = sub_suite.countTestCases()
         total_tests += count
@@ -69,6 +124,10 @@ def run_full_test_suite() -> bool:
 
         runner = unittest.TextTestRunner(verbosity=1, stream=sys.stdout)
         result = runner.run(sub_suite)
+
+        import gc
+        gc.collect()
+        time.sleep(0.05)
 
         sub_failures = len(result.failures)
         sub_errors = len(result.errors)
@@ -89,21 +148,21 @@ def run_full_test_suite() -> bool:
 
     elapsed = time.perf_counter() - t_start
 
-    print("\n" + "=" * 70)
-    print("  TEST SUITE EXECUTION SUMMARY")
-    print("=" * 70)
+    print("\n" + "=" * 78)
+    print("  MASTER TEST SUITE EXECUTION SUMMARY")
+    print("=" * 78)
     print(f"  Total Test Cases : {total_tests}")
     print(f"  Passed           : {passed_count}")
     print(f"  Failures         : {failed_count}")
     print(f"  Errors           : {error_count}")
     print(f"  Time Elapsed     : {elapsed:.2f}s")
-    print("=" * 70)
+    print("=" * 78)
 
     if failed_count == 0 and error_count == 0:
-        print("  🎉 ALL TEST CASES PASSED WITH 100% SUCCESS RATE!\n")
+        print(f"  🎉 ALL {total_tests} TEST CASES PASSED WITH 100% SUCCESS RATE!\n")
         return True
     else:
-        print(f"  ⚠️ {failed_count + error_count} TESTS FAILED. Gaps identified.\n")
+        print(f"  ⚠️  {failed_count + error_count} TESTS FAILED. Gaps identified.\n")
         return False
 
 

@@ -1,5 +1,5 @@
 """
-LocalWhisper Pro v3.2 — Configuration & State Store
+LocalWhisper Pro v3.3 — Configuration & State Store
 Handles settings persistence in ~/.localwhisper/settings.json,
 CUDA path preloading, hardware auto-detection, and multi-mode definitions.
 """
@@ -24,7 +24,7 @@ SETTINGS_FILE = APP_DIR / "settings.json"
 HISTORY_FILE = APP_DIR / "history.json"
 WARMUP_CACHE_FILE = APP_DIR / "warmup_ok"
 WARMUP_CACHE_MAX_AGE = 24 * 3600  # 24 hours
-APP_VERSION = "3.2.0"
+APP_VERSION = "3.3.0"
 
 # ─── Preload Windows CUDA DLL Paths ──────────────────────────────
 def preload_cuda_dlls():
@@ -221,7 +221,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
 
     # Active Mode & Refiner
     "current_mode": "smart",
-    "ai_backend": "ollama",            # "ollama", "groq", "openai", "gemini", "none"
+    "ai_backend": "ollama",            # "ollama", "groq", "openai", "gemini", "custom", "none"
     
     # Ollama
     "ollama_base_url": "http://localhost:11434",
@@ -240,6 +240,11 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     # Gemini API
     "gemini_api_key": "",
     "gemini_model": "gemini-1.5-flash",
+
+    # Custom / Other OpenAI-Compatible API
+    "custom_base_url": "https://api.openai.com/v1",
+    "custom_api_key": "",
+    "custom_model": "gpt-4o-mini",
 
     # Typing & Pasting
     "paste_method": "clipboard",       # "clipboard", "sendinput", "both"
@@ -281,7 +286,22 @@ class ConfigManager:
                         if k == "dictation_modes" and isinstance(v, dict):
                             # Merge custom modes with defaults
                             for mode_k, mode_v in v.items():
+                                if isinstance(mode_v, dict):
+                                    # Don't let empty prompt overwrite non-direct default prompts
+                                    if mode_k != "direct" and not mode_v.get("prompt") and mode_k in DEFAULT_DICTATION_MODES:
+                                        mode_v["prompt"] = DEFAULT_DICTATION_MODES[mode_k].get("prompt", "")
                                 self._config["dictation_modes"][mode_k] = mode_v
+                        elif k == "whisper_language":
+                            if v in ("English", "en"):
+                                self._config[k] = "en"
+                            elif v in ("Hindi", "hi"):
+                                self._config[k] = "hi"
+                            elif v in (None, "None", "auto", "Auto"):
+                                self._config[k] = None
+                            else:
+                                self._config[k] = v
+                        elif k == "whisper_initial_prompt" and not v:
+                            self._config[k] = DEFAULT_CONFIG.get("whisper_initial_prompt", "")
                         else:
                             self._config[k] = v
             except Exception as e:
@@ -298,9 +318,29 @@ class ConfigManager:
             print(f"[Config] Error saving settings: {e}")
 
     def get(self, key: str, default: Any = None) -> Any:
-        return self._config.get(key, default)
+        val = self._config.get(key, default)
+        if key == "whisper_language":
+            if val in ("English", "en"):
+                return "en"
+            elif val in ("Hindi", "hi"):
+                return "hi"
+            elif val in (None, "None", "auto", "Auto"):
+                return None
+            return val
+        if key == "whisper_initial_prompt" and not val:
+            return DEFAULT_CONFIG.get("whisper_initial_prompt", "")
+        return val
 
     def set(self, key: str, value: Any, auto_save: bool = True) -> None:
+        if key == "whisper_language":
+            if value in ("English", "en"):
+                value = "en"
+            elif value in ("Hindi", "hi"):
+                value = "hi"
+            elif value in (None, "None", "auto", "Auto"):
+                value = None
+        elif key == "whisper_initial_prompt" and not value:
+            value = DEFAULT_CONFIG.get("whisper_initial_prompt", "")
         self._config[key] = value
         if auto_save:
             self.save()
@@ -314,7 +354,12 @@ class ConfigManager:
     def current_mode_info(self) -> Dict[str, str]:
         mode_key = self._config.get("current_mode", "smart")
         modes = self._config.get("dictation_modes", DEFAULT_DICTATION_MODES)
-        return modes.get(mode_key, DEFAULT_DICTATION_MODES["smart"])
+        info = modes.get(mode_key, DEFAULT_DICTATION_MODES.get(mode_key, DEFAULT_DICTATION_MODES["smart"]))
+        if isinstance(info, dict):
+            info = info.copy()
+            if mode_key != "direct" and not info.get("prompt") and mode_key in DEFAULT_DICTATION_MODES:
+                info["prompt"] = DEFAULT_DICTATION_MODES[mode_key].get("prompt", "")
+        return info
 
     @property
     def all_modes(self) -> Dict[str, Dict[str, str]]:

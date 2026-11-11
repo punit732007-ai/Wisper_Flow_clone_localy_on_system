@@ -61,14 +61,16 @@ def test_all():
     theme_manager.set_theme("default_dark", auto_save=False)
     print(f"  [OK] {len(BUILTIN_THEMES)} themes verified and switching operational.")
 
-    print("[6/6] Testing Faster-Whisper Model Load & Warm-up (small model)...")
-    from core.transcriber import Transcriber
+    print("[6/6] Testing Faster-Whisper Model Load & Warm-up...")
+    from core.transcriber import Transcriber, _find_cached_models
     from config import config
-    config.set("whisper_model", "small", auto_save=False)
+    cached = _find_cached_models()
+    model_to_test = cached[0] if cached else config.get("whisper_model", "medium")
+    config.set("whisper_model", model_to_test, auto_save=False)
     transcriber = Transcriber()
     transcriber.load_model()
     assert transcriber.is_loaded
-    print("  [OK] Transcriber loaded and warm-up successful!")
+    print(f"  [OK] Transcriber loaded '{model_to_test}' and warm-up successful!")
 
     print("\n=======================================================")
     print("  ALL 6 SMOKE TESTS PASSED CLEANLY & ACCURATELY! 🎉")

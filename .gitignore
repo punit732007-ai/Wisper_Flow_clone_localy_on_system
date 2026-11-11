@@ -38,3 +38,6 @@ wheels/
 # OS Files
 .DS_Store
 Thumbs.db
+
+# Agent & temporary scratch
+.agents/

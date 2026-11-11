@@ -29,42 +29,49 @@ log = logging.getLogger(__name__)
 
 def _build_hud_states(theme: Dict[str, Any]) -> Dict[str, Dict[str, str]]:
     """Generate the full HUD_STATES mapping from a theme dict."""
+    specular_ready = theme.get("hud_specular", theme.get("hud_border", "#ffffff"))
     return {
         "loading": {
             "text": "Loading...",
             "dot_color": theme["info"],
             "bg": theme["hud_bg"],
             "border": theme["info"],
+            "specular": theme.get("hud_specular", theme["info"]),
         },
         "ready": {
             "text": "Ready",
             "dot_color": theme["hud_dot_ready"],
             "bg": theme["hud_bg"],
             "border": theme["hud_border"],
+            "specular": specular_ready,
         },
         "recording": {
             "text": "Listening...",
             "dot_color": theme["hud_dot_recording"],
             "bg": theme.get("hud_bg_recording", theme["hud_bg"]),
             "border": theme["hud_dot_recording"],
+            "specular": theme.get("hud_specular_recording", theme["hud_dot_recording"]),
         },
         "processing": {
             "text": "Refining...",
             "dot_color": theme["hud_dot_processing"],
             "bg": theme.get("hud_bg_processing", theme["hud_bg"]),
             "border": theme["hud_dot_processing"],
+            "specular": theme.get("hud_specular_processing", theme["hud_dot_processing"]),
         },
         "success": {
             "text": "Pasted!",
             "dot_color": theme["hud_dot_success"],
             "bg": theme.get("hud_bg_success", theme["hud_bg"]),
             "border": theme["hud_dot_success"],
+            "specular": theme.get("hud_specular_success", theme["hud_dot_success"]),
         },
         "error": {
             "text": "Error",
             "dot_color": theme["hud_dot_error"],
             "bg": theme.get("hud_bg_error", theme["hud_bg"]),
             "border": theme["hud_dot_error"],
+            "specular": theme.get("hud_specular_error", theme["hud_dot_error"]),
         },
     }
 
@@ -79,6 +86,7 @@ _VIS_STATE_KEY = {
     "success": "hud_dot_success",
     "ready": "hud_dot_ready",
     "loading": "info",
+    "error": "hud_dot_error",
 }
 
 
@@ -257,14 +265,21 @@ class ThemeApplicator:
         except (AttributeError, tk.TclError):
             pass
 
+        # ── Specular highlight ──
+        try:
+            if hasattr(hud, "pill_specular_id"):
+                st = _build_hud_states(theme).get(getattr(hud, "_state", "ready"), {})
+                specular = st.get("specular") or theme.get("hud_specular", theme.get("hud_border", "#ffffff"))
+                canvas.itemconfig(hud.pill_specular_id, fill=specular)
+        except (AttributeError, tk.TclError):
+            pass
+
         # ── Visualizer bar colour ──
         try:
             vis = hud.visualizer
             key = _VIS_STATE_KEY.get(vis.state, "fg_secondary")
             new_color = theme.get(key, vis.color)
-            vis.color = new_color
-            for bar_id in vis.bar_ids:
-                canvas.itemconfig(bar_id, fill=new_color)
+            vis.set_state(vis.state, custom_color=new_color)
         except (AttributeError, tk.TclError):
             pass
 

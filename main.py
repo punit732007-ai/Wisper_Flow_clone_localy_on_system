@@ -1,5 +1,5 @@
 """
-LocalWhisper Pro v3.2 — Main Entrypoint & Coordinator
+LocalWhisper Pro v3.3 — Main Entrypoint & Coordinator
 Orchestrates Audio Capture, Faster-Whisper GPU Inference, Multi-Mode AI Refiner,
 Direct Win32/Clipboard Pasting, Real-time HUD Visualizer, Dynamic 35+ Aesthetic Themes Studio,
 Settings, and System Tray.
@@ -102,7 +102,7 @@ class LocalWhisperApp:
 
     def run(self) -> None:
         """Initialize background workers and start UI event loop."""
-        print("[LocalWhisper Pro] Starting v3.2 with 35+ Aesthetic Themes...")
+        print("[LocalWhisper Pro] Starting v3.3 with 35+ Aesthetic Themes...")
 
         # 1. Start global hotkeys
         self.hotkeys.start()

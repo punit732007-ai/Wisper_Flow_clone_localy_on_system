@@ -6,6 +6,7 @@ customization, layout presets, and theme applicator state mapping.
 
 import unittest
 import re
+from unittest.mock import patch
 from config import config
 from ui.theme_engine import theme_manager, BUILTIN_THEMES
 from ui.theme_applicator import theme_applicator, _build_hud_states
@@ -161,6 +162,200 @@ class TestThemeEngine(unittest.TestCase):
         theme_manager.register_callback(_on_change)
         theme_manager.set_theme("solarpunk", auto_save=False)
         self.assertTrue(len(called) > 0, "Theme callback was not invoked")
+
+    def test_glassmorphic_palettes_and_specular(self):
+        """Validate curated frosted glass palettes and specular highlight values."""
+        for th_key in ["glassmorphism", "liquid_glass"]:
+            self.assertIn(th_key, BUILTIN_THEMES)
+            th = BUILTIN_THEMES[th_key]
+            for req_key in self.REQUIRED_KEYS:
+                self.assertIn(req_key, th, f"Theme '{th_key}' missing required key '{req_key}'")
+            self.assertIn("hud_specular", th)
+            self.assertTrue(
+                HEX_COLOR_PATTERN.match(th["hud_specular"]),
+                f"Invalid specular hex '{th['hud_specular']}' in '{th_key}'"
+            )
+
+        glass = BUILTIN_THEMES["glassmorphism"]
+        self.assertEqual(glass["bg_primary"], "#0b111e")
+        self.assertEqual(glass["bg_secondary"], "#111d2e")
+        self.assertEqual(glass["hud_bg"], "#0f1a2c")
+        self.assertEqual(glass["hud_border"], "#38bdf8")
+        self.assertEqual(glass["hud_specular"], "#bae6fd")
+        self.assertEqual(glass["hud_badge_bg"], "#1c2d44")
+        self.assertEqual(glass["hud_badge_fg"], "#f0f8ff")
+        self.assertEqual(glass["accent"], "#38bdf8")
+
+        liquid = BUILTIN_THEMES["liquid_glass"]
+        self.assertEqual(liquid["bg_primary"], "#02161e")
+        self.assertEqual(liquid["bg_secondary"], "#062734")
+        self.assertEqual(liquid["hud_bg"], "#04202b")
+        self.assertEqual(liquid["hud_border"], "#06b6d4")
+        self.assertEqual(liquid["hud_specular"], "#a5f3fc")
+        self.assertEqual(liquid["hud_badge_bg"], "#08384a")
+        self.assertEqual(liquid["hud_badge_fg"], "#e0fdf4")
+        self.assertEqual(liquid["accent"], "#00f2fe")
+
+        # Test specular highlight in _build_hud_states
+        states_glass = _build_hud_states(glass)
+        for st_name in ["loading", "ready", "recording", "processing", "success", "error"]:
+            self.assertIn("specular", states_glass[st_name])
+        self.assertEqual(states_glass["ready"]["specular"], glass["hud_specular"])
+
+    def test_hud_transparency_invariants(self):
+        """Ensure FloatingHUD adheres to Windows Tkinter transparency invariants."""
+        from ui.floating_hud import FloatingHUD, TRANSPARENT_COLOR
+        from pathlib import Path
+
+        self.assertEqual(TRANSPARENT_COLOR, "#f0abcd")
+
+        # Verify source code constraint: no wm_attributes("-alpha") on self.root
+        hud_src_path = Path(__file__).resolve().parent.parent / "ui" / "floating_hud.py"
+        with open(hud_src_path, "r", encoding="utf-8") as f:
+            src = f.read()
+        self.assertNotIn('"-alpha"', src, "FloatingHUD must not set -alpha to avoid DWM black boxes")
+        self.assertNotIn("'-alpha'", src, "FloatingHUD must not set -alpha to avoid DWM black boxes")
+
+        # Verify runtime window attributes
+        hud = FloatingHUD()
+        try:
+            self.assertEqual(str(hud.root.wm_attributes("-transparentcolor")), TRANSPARENT_COLOR)
+            # Ensure -alpha is not combined with -transparentcolor
+            alpha_val = float(hud.root.wm_attributes("-alpha"))
+            self.assertAlmostEqual(alpha_val, 1.0, places=2)
+        finally:
+            hud.root.destroy()
+
+    def test_hud_canvas_item_reuse_across_theme_switches(self):
+        """Ensure HUD reuses canvas items via coords/itemconfig without deletion leaks."""
+        from ui.floating_hud import FloatingHUD
+
+        hud = FloatingHUD()
+        theme_applicator.register_hud(hud)
+        try:
+            self.assertTrue(hasattr(hud, "pill_specular_id"))
+            initial_items = sorted(hud.canvas.find_all())
+            self.assertIn(hud.pill_specular_id, initial_items)
+            self.assertIn(hud.pill_bg_id, initial_items)
+
+            # Switch to Glassmorphism
+            theme_manager.set_theme("glassmorphism", auto_save=False)
+            items_after_glass = sorted(hud.canvas.find_all())
+            self.assertEqual(initial_items, items_after_glass, "Canvas items modified/recreated during theme switch")
+            self.assertEqual(hud.canvas.itemcget(hud.pill_specular_id, "fill"), "#bae6fd")
+
+            # Switch to Liquid Glass
+            theme_manager.set_theme("liquid_glass", auto_save=False)
+            items_after_liquid = sorted(hud.canvas.find_all())
+            self.assertEqual(initial_items, items_after_liquid, "Canvas items modified/recreated during theme switch")
+            self.assertEqual(hud.canvas.itemcget(hud.pill_specular_id, "fill"), "#a5f3fc")
+
+            # Test layout switching coords reuse without saving to disk
+            with patch.object(config, "save"):
+                for lay in ["compact_pill", "classic_bar", "expanded_card", "minimal_dot"]:
+                    hud.set_layout(lay)
+                    self.assertEqual(sorted(hud.canvas.find_all()), initial_items, f"Item leak in layout {lay}")
+                    coords = hud.canvas.coords(hud.pill_specular_id)
+                    self.assertEqual(len(coords), 4)
+                    self.assertLess(coords[0], coords[2])
+                    self.assertEqual(coords[1], 3.0)
+                    self.assertEqual(coords[3], 3.0)
+        finally:
+            theme_applicator.register_hud(None)
+            hud.root.destroy()
+            theme_manager.set_theme("default_dark", auto_save=False)
+
+    def test_visualizer_state_color_synchronization(self):
+        """Ensure AudioVisualizerWidget synchronizes with active theme dot color across states on theme switch."""
+        from ui.floating_hud import FloatingHUD
+        from ui.visualizer_widget import AudioVisualizerWidget
+
+        hud = FloatingHUD()
+        theme_applicator.register_hud(hud)
+        try:
+            glass = BUILTIN_THEMES["glassmorphism"]
+            liquid = BUILTIN_THEMES["liquid_glass"]
+
+            state_key_map = {
+                "ready": "hud_dot_ready",
+                "recording": "hud_dot_recording",
+                "processing": "hud_dot_processing",
+                "success": "hud_dot_success",
+                "error": "hud_dot_error",
+            }
+
+            for state, dot_key in state_key_map.items():
+                hud.set_state(state)
+
+                # Switch to Glassmorphism while in this state
+                theme_manager.set_theme("glassmorphism", auto_save=False)
+                self.assertEqual(
+                    hud.visualizer.color,
+                    glass[dot_key],
+                    f"Glassmorphism visualizer color desync in state '{state}' (expected {glass[dot_key]}, got {hud.visualizer.color})"
+                )
+
+                # Switch to Liquid Glass while in this state
+                theme_manager.set_theme("liquid_glass", auto_save=False)
+                self.assertEqual(
+                    hud.visualizer.color,
+                    liquid[dot_key],
+                    f"Liquid Glass visualizer color desync in state '{state}' (expected {liquid[dot_key]}, got {hud.visualizer.color})"
+                )
+
+            # Test standalone AudioVisualizerWidget fallback for error state
+            vis = AudioVisualizerWidget(hud.canvas, 0, 0)
+            vis.set_state("error")
+            self.assertEqual(vis.color, "#ff4d6d", "Visualizer error fallback must be error red '#ff4d6d'")
+        finally:
+            theme_applicator.register_hud(None)
+            hud.root.destroy()
+            theme_manager.set_theme("default_dark", auto_save=False)
+
+    def test_specular_highlight_state_preservation_on_theme_switch(self):
+        """Ensure switching theme while in active states (e.g. recording) preserves the active state's specular highlight color."""
+        from ui.floating_hud import FloatingHUD
+
+        hud = FloatingHUD()
+        theme_applicator.register_hud(hud)
+        try:
+            # Set HUD to recording state
+            hud.set_state("recording")
+
+            # Switch to Glassmorphism while in recording state
+            theme_manager.set_theme("glassmorphism", auto_save=False)
+            expected_glass_spec = theme_applicator.get_hud_states()["recording"]["specular"]
+            actual_glass_spec = hud.canvas.itemcget(hud.pill_specular_id, "fill")
+            self.assertEqual(
+                actual_glass_spec,
+                expected_glass_spec,
+                f"Recording specular clobbered on Glassmorphism switch: expected {expected_glass_spec}, got {actual_glass_spec}"
+            )
+
+            # Switch to Liquid Glass while in recording state
+            theme_manager.set_theme("liquid_glass", auto_save=False)
+            expected_liquid_spec = theme_applicator.get_hud_states()["recording"]["specular"]
+            actual_liquid_spec = hud.canvas.itemcget(hud.pill_specular_id, "fill")
+            self.assertEqual(
+                actual_liquid_spec,
+                expected_liquid_spec,
+                f"Recording specular clobbered on Liquid Glass switch: expected {expected_liquid_spec}, got {actual_liquid_spec}"
+            )
+
+            # Also verify in error state
+            hud.set_state("error")
+            theme_manager.set_theme("glassmorphism", auto_save=False)
+            expected_err_spec = theme_applicator.get_hud_states()["error"]["specular"]
+            actual_err_spec = hud.canvas.itemcget(hud.pill_specular_id, "fill")
+            self.assertEqual(
+                actual_err_spec,
+                expected_err_spec,
+                f"Error specular clobbered on Glassmorphism switch: expected {expected_err_spec}, got {actual_err_spec}"
+            )
+        finally:
+            theme_applicator.register_hud(None)
+            hud.root.destroy()
+            theme_manager.set_theme("default_dark", auto_save=False)
 
 
 if __name__ == "__main__":

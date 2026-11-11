@@ -73,6 +73,44 @@ class AIRefiner:
             self._last_backend_status = {"ok": True, "msg": msg}
             return True, msg
 
+        elif backend in ("custom", "other"):
+            base_url = (config.get("custom_base_url") or "").strip()
+            if not base_url:
+                msg = "Custom API Base URL not set"
+                self._last_backend_status = {"ok": False, "msg": msg}
+                return False, msg
+
+            model = (config.get("custom_model") or "").strip()
+            if not model:
+                msg = "Custom Model name not set"
+                self._last_backend_status = {"ok": False, "msg": msg}
+                return False, msg
+
+            api_key = (config.get("custom_api_key") or "").strip()
+            headers = {}
+            if api_key:
+                headers["Authorization"] = f"Bearer {api_key}"
+
+            try:
+                models_url = f"{base_url.rstrip('/')}/models"
+                resp = requests.get(models_url, headers=headers, timeout=5)
+                if resp.status_code == 200:
+                    msg = f"Custom API Online (Model '{model}' ready)"
+                    self._last_backend_status = {"ok": True, "msg": msg}
+                    return True, msg
+                elif resp.status_code in (401, 403):
+                    msg = f"Custom API Auth Failed (HTTP {resp.status_code})"
+                    self._last_backend_status = {"ok": False, "msg": msg}
+                    return False, msg
+                else:
+                    msg = f"Custom API Reachable (HTTP {resp.status_code})"
+                    self._last_backend_status = {"ok": True, "msg": msg}
+                    return True, msg
+            except Exception as e:
+                msg = f"Custom API not reachable: {e}"
+                self._last_backend_status = {"ok": False, "msg": msg}
+                return False, msg
+
         return False, "Unknown backend"
 
     def refine(self, raw_text: str, language: str = "en") -> str:
@@ -110,6 +148,8 @@ class AIRefiner:
                 refined = self._call_openai(system_prompt, user_prompt)
             elif backend == "gemini":
                 refined = self._call_gemini(system_prompt, user_prompt)
+            elif backend in ("custom", "other"):
+                refined = self._call_custom(system_prompt, user_prompt)
             else:
                 refined = None
 
@@ -234,6 +274,45 @@ class AIRefiner:
                 if parts:
                     return parts[0].get("text", "").strip()
         return None
+
+    def _call_custom(self, system_prompt: str, user_prompt: str) -> Optional[str]:
+        api_key = (config.get("custom_api_key") or "").strip()
+        base_url = (config.get("custom_base_url") or "https://api.openai.com/v1").strip()
+        model = (config.get("custom_model") or "gpt-4o-mini").strip()
+        if not base_url or not model:
+            return None
+
+        headers = {"Content-Type": "application/json"}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+
+        url = f"{base_url.rstrip('/')}/chat/completions"
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "temperature": 0.1,
+            "max_tokens": 512,
+        }
+
+        try:
+            resp = requests.post(url, headers=headers, json=payload, timeout=15)
+            if resp.status_code == 200:
+                data = resp.json()
+                choices = data.get("choices", [])
+                if choices:
+                    content = choices[0].get("message", {}).get("content", "")
+                    if content:
+                        content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
+                        if (content.startswith('"') and content.endswith('"')) or (content.startswith("'") and content.endswith("'")):
+                            content = content[1:-1].strip()
+                        return content
+            return None
+        except Exception as exc:
+            print(f"[AIRefiner] Custom API call failed: {exc}")
+            return None
 
     # ── Offline Rule-Based Fast Cleaner ───────────────────────────
 

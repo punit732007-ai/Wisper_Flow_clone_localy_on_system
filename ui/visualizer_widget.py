@@ -6,7 +6,7 @@ Reuses canvas items for maximum performance and zero garbage collection overhead
 
 import math
 import tkinter as tk
-from typing import List
+from typing import List, Optional
 
 
 class AudioVisualizerWidget:
@@ -53,10 +53,12 @@ class AudioVisualizerWidget:
         self.width = width
         self.height = height
 
-    def set_state(self, state: str) -> None:
-        """Update visualizer color according to HUD state."""
+    def set_state(self, state: str, custom_color: Optional[str] = None) -> None:
+        """Update visualizer color according to HUD state or custom theme color."""
         self.state = state
-        if state == "recording":
+        if custom_color:
+            self.color = custom_color
+        elif state == "recording":
             self.color = "#ff4d6d"
         elif state == "processing":
             self.color = "#ffb703"
@@ -66,6 +68,8 @@ class AudioVisualizerWidget:
             self.color = "#52b788"
         elif state == "loading":
             self.color = "#00b4d8"
+        elif state == "error":
+            self.color = "#ff4d6d"
         else:
             self.color = "#8d99ae"
 

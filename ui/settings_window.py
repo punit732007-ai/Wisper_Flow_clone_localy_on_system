@@ -471,6 +471,7 @@ class SettingsWindow:
             ("groq", "Groq Cloud (Free Ultra-Fast 500+ tokens/sec)"),
             ("openai", "OpenAI / OpenRouter API"),
             ("gemini", "Google Gemini API"),
+            ("custom", "Other / Custom (OpenAI-Compatible API)"),
             ("none", "None (Direct Fast Whisper Paste)"),
         ]
         for val, label in backends:
@@ -500,6 +501,22 @@ class SettingsWindow:
         tk.Label(groq_frame, text="OpenAI Key:", bg=theme["bg_primary"], fg=theme["fg_primary"], font=(theme.get("font_family", "Segoe UI"), 9)).grid(row=1, column=0, sticky="w")
         self.openai_key_var = tk.StringVar(value=config.get("openai_api_key", ""))
         tk.Entry(groq_frame, textvariable=self.openai_key_var, show="•", bg=theme["bg_secondary"], fg=theme["fg_primary"], width=36).grid(row=1, column=1, padx=6, pady=2, sticky="w")
+
+        # Other / Custom OpenAI-Compatible API
+        custom_frame = tk.LabelFrame(content, text="Other / Custom API (OpenAI-Compatible)", bg=theme["bg_primary"], fg=theme["accent"], padx=8, pady=6)
+        custom_frame.pack(fill="x", pady=(6, 8))
+
+        tk.Label(custom_frame, text="Base URL:", bg=theme["bg_primary"], fg=theme["fg_primary"], font=(theme.get("font_family", "Segoe UI"), 9)).grid(row=0, column=0, sticky="w")
+        self.custom_base_url_var = tk.StringVar(value=config.get("custom_base_url", "https://api.openai.com/v1"))
+        tk.Entry(custom_frame, textvariable=self.custom_base_url_var, bg=theme["bg_secondary"], fg=theme["fg_primary"], width=36).grid(row=0, column=1, padx=6, pady=2, sticky="w")
+
+        tk.Label(custom_frame, text="API Key:", bg=theme["bg_primary"], fg=theme["fg_primary"], font=(theme.get("font_family", "Segoe UI"), 9)).grid(row=1, column=0, sticky="w")
+        self.custom_key_var = tk.StringVar(value=config.get("custom_api_key", ""))
+        tk.Entry(custom_frame, textvariable=self.custom_key_var, show="•", bg=theme["bg_secondary"], fg=theme["fg_primary"], width=36).grid(row=1, column=1, padx=6, pady=2, sticky="w")
+
+        tk.Label(custom_frame, text="Model:", bg=theme["bg_primary"], fg=theme["fg_primary"], font=(theme.get("font_family", "Segoe UI"), 9)).grid(row=2, column=0, sticky="w")
+        self.custom_model_var = tk.StringVar(value=config.get("custom_model", "gpt-4o-mini"))
+        tk.Entry(custom_frame, textvariable=self.custom_model_var, bg=theme["bg_secondary"], fg=theme["fg_primary"], width=36).grid(row=2, column=1, padx=6, pady=2, sticky="w")
 
         # Test Backend Button
         test_frame = tk.Frame(content, bg=theme["bg_primary"])
@@ -656,6 +673,22 @@ class SettingsWindow:
     def _test_backend_connection(self) -> None:
         self.backend_status_lbl.config(text="Checking backend...", fg="#ffb703")
 
+        # Stage in-memory UI values into config before checking
+        if hasattr(self, "ai_backend_var"):
+            config.set("ai_backend", self.ai_backend_var.get(), auto_save=False)
+        if hasattr(self, "ollama_model_var"):
+            config.set("ollama_model", self.ollama_model_var.get().strip(), auto_save=False)
+        if hasattr(self, "groq_key_var"):
+            config.set("groq_api_key", self.groq_key_var.get().strip(), auto_save=False)
+        if hasattr(self, "openai_key_var"):
+            config.set("openai_api_key", self.openai_key_var.get().strip(), auto_save=False)
+        if hasattr(self, "custom_base_url_var"):
+            config.set("custom_base_url", self.custom_base_url_var.get().strip(), auto_save=False)
+        if hasattr(self, "custom_key_var"):
+            config.set("custom_api_key", self.custom_key_var.get().strip(), auto_save=False)
+        if hasattr(self, "custom_model_var"):
+            config.set("custom_model", self.custom_model_var.get().strip(), auto_save=False)
+
         def _worker():
             ok, msg = ai_refiner.check_backend_status()
             color = "#52b788" if ok else "#ff5555"
@@ -710,6 +743,12 @@ class SettingsWindow:
         config.set("ollama_model", self.ollama_model_var.get().strip())
         config.set("groq_api_key", self.groq_key_var.get().strip())
         config.set("openai_api_key", self.openai_key_var.get().strip())
+        if hasattr(self, "custom_base_url_var"):
+            config.set("custom_base_url", self.custom_base_url_var.get().strip())
+        if hasattr(self, "custom_key_var"):
+            config.set("custom_api_key", self.custom_key_var.get().strip())
+        if hasattr(self, "custom_model_var"):
+            config.set("custom_model", self.custom_model_var.get().strip())
 
         # Mode prompt edit
         raw_mode = self.selected_mode_key.get()

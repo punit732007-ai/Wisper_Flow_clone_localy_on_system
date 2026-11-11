@@ -82,6 +82,53 @@ def _clear_warmup_cache():
         pass
 
 
+from pathlib import Path
+
+
+def _clean_stale_hf_locks():
+    """Remove abandoned HuggingFace .lock files that may cause download deadlocks."""
+    try:
+        lock_dir = Path.home() / ".cache" / "huggingface" / "hub" / ".locks"
+        if lock_dir.exists():
+            now = time.time()
+            for lock_file in lock_dir.rglob("*.lock"):
+                try:
+                    # Clean up locks older than 60s
+                    if now - lock_file.stat().st_mtime > 60:
+                        lock_file.unlink()
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+
+def _find_cached_models() -> List[str]:
+    """Return a list of Whisper model names that are already fully cached locally."""
+    cached = []
+    try:
+        hub_dir = Path.home() / ".cache" / "huggingface" / "hub"
+        if not hub_dir.exists():
+            return cached
+        for item in hub_dir.iterdir():
+            if item.is_dir() and item.name.startswith("models--Systran--"):
+                snapshots = item / "snapshots"
+                if snapshots.exists():
+                    for snap in snapshots.iterdir():
+                        if snap.is_dir() and any((snap / f).exists() for f in ("model.bin", "model.safetensors")):
+                            raw_name = item.name.replace("models--Systran--faster-", "")
+                            if raw_name.startswith("distil-whisper-"):
+                                m_id = "distil-" + raw_name.replace("distil-whisper-", "")
+                            elif raw_name.startswith("whisper-"):
+                                m_id = raw_name.replace("whisper-", "")
+                            else:
+                                m_id = raw_name
+                            cached.append(m_id)
+                            break
+    except Exception:
+        pass
+    return cached
+
+
 class Transcriber:
     """CTranslate2 Whisper transcriber with GPU auto-tuning."""
 
@@ -116,6 +163,7 @@ class Transcriber:
                 return
 
             self._is_loading = True
+            _clean_stale_hf_locks()
             t0 = time.perf_counter()
             print(
                 f"[Transcriber] Loading model '{target_model}' on {target_device} ({target_compute})..."
@@ -151,22 +199,58 @@ class Transcriber:
                 if "cublas" in err_msg or "cuda" in err_msg or "cudnn" in err_msg or "library" in err_msg:
                     print(f"[Transcriber] CUDA failed: {e}. Falling back to CPU int8...")
                     _clear_warmup_cache()
-                    self._model = WhisperModel(
-                        target_model,
-                        device="cpu",
-                        compute_type="int8",
-                    )
-                    self._current_model_name = target_model
-                    self._current_device = "cpu"
-                    config.set("whisper_device", "cpu")
-                    config.set("whisper_compute_type", "int8")
-                    elapsed = time.perf_counter() - t0
-                    print(f"[Transcriber] CPU fallback model ready in {elapsed:.1f}s")
+                    try:
+                        self._model = WhisperModel(
+                            target_model,
+                            device="cpu",
+                            compute_type="int8",
+                        )
+                        self._current_model_name = target_model
+                        self._current_device = "cpu"
+                        config.set("whisper_device", "cpu")
+                        config.set("whisper_compute_type", "int8")
+                        elapsed = time.perf_counter() - t0
+                        print(f"[Transcriber] CPU fallback model ready in {elapsed:.1f}s")
+                    except Exception as cpu_e:
+                        print(f"[Transcriber] CPU fallback failed: {cpu_e}")
+                        self._try_cached_fallback(target_device, target_compute, t0)
                 else:
-                    self._is_loading = False
-                    raise e
+                    print(f"[Transcriber] Model '{target_model}' load failed: {e}")
+                    if not self._try_cached_fallback(target_device, target_compute, t0):
+                        self._is_loading = False
+                        raise e
 
             self._is_loading = False
+
+    def _try_cached_fallback(self, device: str, compute: str, t0: float) -> bool:
+        """Attempt to fall back to an already cached local model."""
+        cached = _find_cached_models()
+        if not cached:
+            return False
+
+        # Prefer medium, small, base, tiny in that order
+        priority = ["medium", "distil-large-v3", "small", "base", "tiny", "large-v3"]
+        fallback_model = None
+        for p in priority:
+            if p in cached:
+                fallback_model = p
+                break
+        if not fallback_model and cached:
+            fallback_model = cached[0]
+
+        if fallback_model:
+            print(f"[Transcriber] Falling back to available local model '{fallback_model}'...")
+            try:
+                self._model = WhisperModel(fallback_model, device=device, compute_type=compute)
+                self._current_model_name = fallback_model
+                self._current_device = device
+                config.set("whisper_model", fallback_model)
+                elapsed = time.perf_counter() - t0
+                print(f"[Transcriber] Local fallback model '{fallback_model}' ready in {elapsed:.1f}s")
+                return True
+            except Exception as e:
+                print(f"[Transcriber] Local fallback to '{fallback_model}' failed: {e}")
+        return False
 
     def transcribe(self, audio: np.ndarray) -> Tuple[str, str, float]:
         """

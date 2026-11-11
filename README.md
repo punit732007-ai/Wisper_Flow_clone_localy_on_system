@@ -1,5 +1,5 @@
 <div align="center">
-  <h1>🎙️ LocalWhisper Pro v3.2</h1>
+  <h1>🎙️ LocalWhisper Pro v3.3</h1>
   <p><b>Next-Gen Local AI Speech-to-Text with 35+ Aesthetic Themes, Custom Palette Studio, Dynamic Layouts & Wallpaper Integration.</b></p>
   <p>
     <img src="https://img.shields.io/badge/Themes-35%2B%20Aesthetic%20Styles-ff007f?style=for-the-badge" alt="35+ Themes" />
